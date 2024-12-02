@@ -8,15 +8,15 @@ def shifted_sigmoid(currents):
     return (1 / (1 + torch.exp(-currents)) - 0.5) / 2
 
 
-class SnnLayer(nn.Module):
+class SNNLayer(nn.Module):
     def __init__(
         self,
-        in_dim: int,
-        hidden_dim: int,
-        is_rec: bool,
-        is_adapt: bool,
+        d_in: int,
+        d_hidden: int,
+        is_recurrent: bool,
+        is_adaptive: bool,
         one_to_one: bool,
-        baseline_threshold,
+        b0,
         device,
         tau_m_init=15.0,
         tau_adap_init=20,
@@ -24,18 +24,16 @@ class SnnLayer(nn.Module):
         dt=0.5,
         bias=True,
     ):
-        super(SnnLayer, self).__init__()
+        super(SNNLayer, self).__init__()
 
-        self.in_dim = in_dim
-        self.hidden_dim = hidden_dim
-        self.is_rec = is_rec
-        self.is_adapt = is_adapt
+        self.is_recurrent = is_recurrent
+        self.is_adaptive = is_adaptive
         self.one_to_one = one_to_one
         self.dt = dt
-        self.baseline_threshold = baseline_threshold
+        self.baseline_threshold = b0
 
-        if is_rec:
-            self.rec_w = nn.Linear(hidden_dim, hidden_dim, bias=bias)
+        if is_recurrent:
+            self.rec_w = nn.Linear(d_hidden, d_hidden, bias=bias)
             # init weights
             if bias:
                 nn.init.constant_(self.rec_w.bias, 0)
@@ -45,30 +43,19 @@ class SnnLayer(nn.Module):
             self.weight_mask = torch.bernoulli(p)
 
         else:
-            self.fc_weights = nn.Linear(in_dim, hidden_dim, bias=bias)
+            self.fc_weights = nn.Linear(d_in, d_hidden, bias=bias)
             if bias:
                 nn.init.constant_(self.fc_weights.bias, 0)
             nn.init.xavier_uniform_(self.fc_weights.weight)
 
         # define param for time constants
-        self.tau_adp = nn.Parameter(torch.Tensor(hidden_dim))
-        self.tau_m = nn.Parameter(torch.Tensor(hidden_dim))
-        self.tau_a = nn.Parameter(torch.Tensor(hidden_dim))
+        self.tau_adp = nn.Parameter(torch.Tensor(d_hidden))
+        self.tau_m = nn.Parameter(torch.Tensor(d_hidden))
+        self.tau_a = nn.Parameter(torch.Tensor(d_hidden))
 
         nn.init.normal_(self.tau_adp, tau_adap_init, 0.1)
         nn.init.normal_(self.tau_m, tau_m_init, 0.1)
         nn.init.normal_(self.tau_a, tau_a_init, 0.1)
-
-        # self.tau_adp = nn.Parameter(torch.Tensor(1))
-        # self.tau_m = nn.Parameter(torch.Tensor(1))
-        # self.tau_a = nn.Parameter(torch.Tensor(1))
-
-        # nn.init.constant_(self.tau_adp, tau_adap_init)
-        # nn.init.constant_(self.tau_m, tau_m_init)
-        # nn.init.constant_(self.tau_a, tau_a_init)
-
-        # nn.init.normal_(self.tau_adp, 200., 20.)
-        # nn.init.normal_(self.tau_m, 20., .5)
 
         self.sigmoid = nn.Sigmoid()
 
@@ -121,7 +108,7 @@ class SnnLayer(nn.Module):
         :return:
         """
 
-        if self.is_rec:
+        if self.is_recurrent:
             self.rec_w.weight.data = self.rec_w.weight.data * self.weight_mask
             # self.rec_w.weight.data = (self.rec_w.weight.data < 0).float() * self.rec_w.weight.data
             r_in = ff + self.rec_w(spk_t)
@@ -132,7 +119,7 @@ class SnnLayer(nn.Module):
                 r_in = self.fc_weights(ff)
 
         soma_t1, spk_t1, a_curr_t1, _, b_t1 = self.mem_update(
-            r_in, fb, soma_t, spk_t, a_curr_t, b_t, self.is_adapt
+            r_in, fb, soma_t, spk_t, a_curr_t, b_t, self.is_adaptive
         )
 
         return soma_t1, spk_t1, a_curr_t1, b_t1
@@ -140,7 +127,7 @@ class SnnLayer(nn.Module):
 
 class OutputLayer(nn.Module):
     def __init__(
-        self, in_dim: int, out_dim: int, is_fc: bool, tau_fixed=None, bias=True, dt=0.5
+        self, d_in: int, d_out: int, is_fc: bool, tau_fixed=None, bias=True, dt=0.5
     ):
         """
         output layer class
@@ -148,23 +135,23 @@ class OutputLayer(nn.Module):
         """
         super(OutputLayer, self).__init__()
 
-        self.in_dim = in_dim
-        self.out_dim = out_dim
+        self.d_in = d_in
+        self.d_out = d_out
         self.is_fc = is_fc
         self.dt = dt
 
         if is_fc:
-            self.fc = nn.Linear(in_dim, out_dim, bias=bias)
+            self.fc = nn.Linear(d_in, d_out, bias=bias)
             if bias:
                 nn.init.constant_(self.fc.bias, 0)
             nn.init.xavier_uniform_(self.fc.weight)
 
         # tau_m
         if tau_fixed is None:
-            self.tau_m = nn.Parameter(torch.Tensor(out_dim))
+            self.tau_m = nn.Parameter(torch.Tensor(d_out))
             nn.init.constant_(self.tau_m, 5)
         else:
-            self.tau_m = nn.Parameter(torch.Tensor(out_dim), requires_grad=False)
+            self.tau_m = nn.Parameter(torch.Tensor(d_out), requires_grad=False)
             nn.init.constant_(self.tau_m, tau_fixed)
 
         self.sigmoid = nn.Sigmoid()
@@ -179,7 +166,7 @@ class OutputLayer(nn.Module):
         if self.is_fc:
             x_t = self.fc(x_t)
         else:
-            x_t = x_t.view(-1, 10, int(self.in_dim / 10)).mean(
+            x_t = x_t.view(-1, 10, int(self.d_in / 10)).mean(
                 dim=2
             )  # sum up population spike
 
