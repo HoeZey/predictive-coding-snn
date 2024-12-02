@@ -1,46 +1,182 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from predcoding.snn.layer import OutputLayer, SnnLayer
+from dataclasses import dataclass
+from abc import ABC, abstractmethod
+from predcoding.snn.layer import OutputLayer, SNNLayer
+
+
+@dataclass
+class LayerHistory:
+    soma: torch.FloatTensor | float
+    spikes: torch.FloatTensor | float
+    dendrites: torch.FloatTensor | float
+    b: torch.FloatTensor | float
+
+
+class SNN(nn.Module):
+    def __init__(
+        self,
+        d_in: int,
+        d_hidden: list[int],
+        d_out: int,
+        is_adaptive: bool,
+        one_to_one: bool,
+        p_dropout: float,
+        is_recurrent: bool,
+        b0: float,
+        device: str,
+        bias=True,
+    ):
+        self.d_hidden = d_hidden
+        self.d_out = d_out
+        self.b0 = b0
+
+        self.firing_rates: list[torch.FloatTensor] = [0] * len(d_hidden)
+        self.energies: list[torch.FloatTensor] = [0] * len(d_hidden)
+
+        self.dropout = nn.Dropout(p_dropout)
+        self.input_layer = nn.Linear(d_in, d_hidden[0], bias=bias)
+        self.output_layer = OutputLayer(d_hidden[-1], d_out, is_fc=True, bias=bias)
+
+        self.hidden_layers: list[SNNLayer] = []
+        for d in d_hidden:
+            self.hidden_layers.append(
+                SNNLayer(
+                    d_in=d,
+                    d_hidden=d,
+                    is_recurrent=is_recurrent,
+                    is_adaptive=is_adaptive,
+                    one_to_one=one_to_one,
+                    device=device,
+                    bias=bias,
+                    b0=b0,
+                )
+            )
+
+        self.forward_connections: list[nn.Linear] = [self.input_layer]
+        self.backward_connections: list[nn.Linear] = []
+        for d1, d2 in zip(d_hidden, d_hidden[1:]):
+            self.forward_connections.append(nn.Linear(d1, d2, bias=bias))
+            self.backward_connections.append(nn.Linear(d2, d1, bias=bias))
+        self.backward_connections.append(self.output_layer)
+
+        for ff, fb in zip(self.forward_connections, self.backward_connections):
+            nn.init.xavier_uniform_(ff.weight)
+            nn.init.xavier_uniform_(fb.weight)
+            if bias:
+                nn.init.constant_(ff.bias, 0)
+                nn.init.constant_(fb.bias, 0)
+
+    def forward(
+        self, x_t, histories: list[LayerHistory], readout: torch.FloatTensor
+    ) -> tuple[torch.FloatTensor, list[LayerHistory], torch.FloatTensor]:
+        batch_dim, input_size = x_t.shape
+        x_t = self.dropout(x_t.reshape(batch_dim, input_size).float() * 0.5)
+        spikes = x_t
+
+        new_histories = []
+
+        for i, (layer, ff_connections, fb_connections, h) in enumerate(
+            zip(
+                self.hidden_layers,
+                self.forward_connections,
+                self.backward_connections,
+                histories,
+            )
+        ):
+            is_last_layer = i + 1 == len(self.hidden_layers)
+            fb_input = h.spikes if not is_last_layer else F.normalize(readout, dim=1)
+
+            soma, spikes, dendrites, b = layer(
+                ff=ff_connections(spikes),
+                fb=fb_connections(fb_input),
+                soma_t=h.soma,
+                spike_t=h.spikes,
+                a_curr_t=h.dendrites,
+                b_t=h.b,
+            )
+
+            h1 = LayerHistory(soma=soma, spikes=spikes, dendrites=dendrites, b=b)
+            new_histories.append(h1)
+            self.energies[i] = dendrites - soma
+            self.firing_rates[i] += spikes.mean().item()
+
+        output = self.output_layer(spikes, readout)
+        log_softmax = F.log_softmax(output, dim=1)
+
+        return log_softmax, new_histories, output
+
+    def init_hidden(self, bsz, all_zero=False):
+        weight = next(self.parameters()).data
+        hidden_layer_weights = [
+            [
+                weight.new(bsz, d).uniform_() if not all_zero else weight.new(bsz, d).zero_(),
+                weight.new(bsz, d).zero_(),
+                weight.new(bsz, d).zero_(),
+                weight.new(bsz, d).fill_(self.b0),
+            ]
+            for d in self.d_hidden
+        ]
+        return [w for ws in hidden_layer_weights for w in ws] + [
+            weight.new(bsz, self.d_out).zero_(),  # layer out
+            weight.new(bsz, self.d_out).zero_(),  # sum spike
+        ]
+
+    def get_energies(self):
+        l_energy = 0
+        for e in self.energies:
+            l_energy = l_energy + (e**2).sum()
+        return l_energy
+
+    def get_spike_loss(self, histories: list[LayerHistory]):
+        l_spikes = 0
+        for h in histories:
+            l_spikes = l_spikes + (h.spikes**2).sum()
+        return l_spikes
+
+    def reset_energies(self):
+        for i in range(len(self.energies)):
+            self.energies[i] = 0
 
 
 # 2 hidden layers
 class SnnNetwork(nn.Module):
     def __init__(
         self,
-        in_dim: int,
+        d_in: int,
         hidden_dims: list,
         out_dim: int,
         is_adapt: bool,
         one_to_one: bool,
         dp_rate: float,
         is_rec: bool,
-        b_j0: float,
+        b0: float,
         device: str,
         bias=True,
     ):
         super(SnnNetwork, self).__init__()
 
-        self.in_dim = in_dim
-        self.hidden_dims = hidden_dims
-        self.out_dim = out_dim
-        self.is_adapt = is_adapt
+        self.d_in = d_in
+        self.d_hidden = hidden_dims
+        self.d_out = out_dim
+        self.is_adaptive = is_adapt
         self.one_to_one = one_to_one
         self.is_rec = is_rec
-        self.b_j0 = b_j0
+        self.b_j0 = b0
         self.device = device
 
         self.dp = nn.Dropout(dp_rate)
 
-        self.layer1 = SnnLayer(
+        self.layer1 = SNNLayer(
             hidden_dims[0],
             hidden_dims[0],
-            is_rec=is_rec,
-            is_adapt=is_adapt,
+            is_recurrent=is_rec,
+            is_adaptive=is_adapt,
             one_to_one=one_to_one,
             bias=bias,
             device=device,
-            baseline_threshold=b_j0,
+            b0=b0,
         )
 
         # r in to r out
@@ -51,15 +187,15 @@ class SnnNetwork(nn.Module):
         self.layer2to1 = nn.Linear(hidden_dims[1], hidden_dims[0], bias=bias)
         nn.init.xavier_uniform_(self.layer2to1.weight)
 
-        self.layer2 = SnnLayer(
+        self.layer2 = SNNLayer(
             hidden_dims[1],
             hidden_dims[1],
-            is_rec=is_rec,
-            is_adapt=is_adapt,
+            is_recurrent=is_rec,
+            is_adaptive=is_adapt,
             one_to_one=one_to_one,
             bias=bias,
             device=device,
-            baseline_threshold=b_j0,
+            b0=b0,
         )
 
         self.output_layer = OutputLayer(hidden_dims[1], out_dim, is_fc=True, bias=bias)
@@ -78,7 +214,7 @@ class SnnNetwork(nn.Module):
         self.error1 = 0
         self.error2 = 0
 
-    def forward(self, x_t, h):
+    def forward(self, x_t, h: list[LayerHistory]):
         batch_dim, input_size = x_t.shape
 
         x_t = x_t.reshape(batch_dim, input_size).float()
@@ -172,9 +308,7 @@ class SnnNetwork(nn.Module):
                 h_clamped[-1][0] = -clamp_value
                 h_clamped[-1][0, test_class] = clamp_value
             else:
-                h_clamped[-1][:, :] = torch.full(h_clamped[-1].size(), -clamp_value).to(
-                    self.device
-                )
+                h_clamped[-1][:, :] = torch.full(h_clamped[-1].size(), -clamp_value).to(self.device)
                 h_clamped[-1][:, test_class] = clamp_value
 
             if noise is not None:
@@ -194,19 +328,19 @@ class SnnNetwork(nn.Module):
         weight = next(self.parameters()).data
         return (
             # r
-            weight.new(bsz, self.hidden_dims[0]).uniform_(),
-            weight.new(bsz, self.hidden_dims[0]).zero_(),
-            weight.new(bsz, self.hidden_dims[0]).zero_(),
-            weight.new(bsz, self.hidden_dims[0]).fill_(self.b_j0),
+            weight.new(bsz, self.d_hidden[0]).uniform_(),
+            weight.new(bsz, self.d_hidden[0]).zero_(),
+            weight.new(bsz, self.d_hidden[0]).zero_(),
+            weight.new(bsz, self.d_hidden[0]).fill_(self.b_j0),
             # p
-            weight.new(bsz, self.hidden_dims[1]).uniform_(),
-            weight.new(bsz, self.hidden_dims[1]).zero_(),
-            weight.new(bsz, self.hidden_dims[1]).zero_(),
-            weight.new(bsz, self.hidden_dims[1]).fill_(self.b_j0),
+            weight.new(bsz, self.d_hidden[1]).uniform_(),
+            weight.new(bsz, self.d_hidden[1]).zero_(),
+            weight.new(bsz, self.d_hidden[1]).zero_(),
+            weight.new(bsz, self.d_hidden[1]).fill_(self.b_j0),
             # layer out
-            weight.new(bsz, self.out_dim).zero_(),
+            weight.new(bsz, self.d_out).zero_(),
             # sum spike
-            weight.new(bsz, self.out_dim).zero_(),
+            weight.new(bsz, self.d_out).zero_(),
         )
 
     def get_energy(self):
@@ -231,7 +365,7 @@ class SnnNetwork3Layer(SnnNetwork):
         one_to_one: bool,
         dp_rate: float,
         is_rec: bool,
-        b_j0: float,
+        b0: float,
         device: str,
         bias=True,
     ):
@@ -243,19 +377,19 @@ class SnnNetwork3Layer(SnnNetwork):
             one_to_one,
             dp_rate,
             is_rec,
-            b_j0,
+            b0,
             device,
         )
 
-        self.layer3 = SnnLayer(
+        self.layer3 = SNNLayer(
             hidden_dims[2],
             hidden_dims[2],
-            is_rec=is_rec,
-            is_adapt=is_adapt,
+            is_recurrent=is_rec,
+            is_adaptive=is_adapt,
             one_to_one=one_to_one,
             device=device,
             bias=bias,
-            baseline_threshold=b_j0,
+            b0=b0,
         )
 
         self.layer2to3 = nn.Linear(hidden_dims[1], hidden_dims[2], bias=bias)
@@ -324,97 +458,100 @@ class SnnNetwork3Layer(SnnNetwork):
             a_curr_t=h[10],
             b_t=h[11],
         )
-        # soma_3, spk_3, a_curr_3, b_3 = self.layer3(ff=self.layer2to3(spk_2), fb=0, soma_t=h[8],
-        #                                            spk_t=h[9], a_curr_t=h[10], b_t=h[11])
 
         self.error3 = a_curr_3 - soma_3
 
-        self.fr_layer3 = self.fr_layer3 + spk_3.detach().cpu().numpy().mean()
-        self.fr_layer2 = self.fr_layer2 + spk_2.detach().cpu().numpy().mean()
-        self.fr_layer1 = self.fr_layer1 + spk_1.detach().cpu().numpy().mean()
+        self.fr_layer3 += spk_3.detach().cpu().numpy().mean()
+        self.fr_layer2 += spk_2.detach().cpu().numpy().mean()
+        self.fr_layer1 += spk_1.detach().cpu().numpy().mean()
 
         # read out from r_out neurons
         mem_out = self.output_layer(spk_3, h[-1])
 
         h = (
-            soma_1,
-            spk_1,
-            a_curr_1,
-            b_1,
-            soma_2,
-            spk_2,
-            a_curr_2,
-            b_2,
-            soma_3,
-            spk_3,
-            a_curr_3,
-            b_3,
-            mem_out,
+            {
+                "soma": soma_1,
+                "spikes": spk_1,
+                "current": a_curr_1,
+                "bias": b_1,
+            },
+            {
+                "soma": soma_2,
+                "spikes": spk_2,
+                "current": a_curr_2,
+                "bias": b_2,
+            },
+            {
+                "soma": soma_3,
+                "spikes": spk_3,
+                "current": a_curr_3,
+                "bias": b_3,
+            },
         )
 
         log_softmax = F.log_softmax(mem_out, dim=1)
 
-        return log_softmax, h
+        return log_softmax, h, mem_out
 
     def init_hidden(self, bsz):
         weight = next(self.parameters()).data
         return (
             # l1
-            weight.new(bsz, self.hidden_dims[0]).uniform_(),
-            weight.new(bsz, self.hidden_dims[0]).zero_(),
-            weight.new(bsz, self.hidden_dims[0]).zero_(),
-            weight.new(bsz, self.hidden_dims[0]).fill_(self.b_j0),
+            weight.new(bsz, self.d_hidden[0]).uniform_(),
+            weight.new(bsz, self.d_hidden[0]).zero_(),
+            weight.new(bsz, self.d_hidden[0]).zero_(),
+            weight.new(bsz, self.d_hidden[0]).fill_(self.b_j0),
             # l2
-            weight.new(bsz, self.hidden_dims[1]).uniform_(),
-            weight.new(bsz, self.hidden_dims[1]).zero_(),
-            weight.new(bsz, self.hidden_dims[1]).zero_(),
-            weight.new(bsz, self.hidden_dims[1]).fill_(self.b_j0),
+            weight.new(bsz, self.d_hidden[1]).uniform_(),
+            weight.new(bsz, self.d_hidden[1]).zero_(),
+            weight.new(bsz, self.d_hidden[1]).zero_(),
+            weight.new(bsz, self.d_hidden[1]).fill_(self.b_j0),
             # l3
-            weight.new(bsz, self.hidden_dims[2]).uniform_(),
-            weight.new(bsz, self.hidden_dims[2]).zero_(),
-            weight.new(bsz, self.hidden_dims[2]).zero_(),
-            weight.new(bsz, self.hidden_dims[2]).fill_(self.b_j0),
+            weight.new(bsz, self.d_hidden[2]).uniform_(),
+            weight.new(bsz, self.d_hidden[2]).zero_(),
+            weight.new(bsz, self.d_hidden[2]).zero_(),
+            weight.new(bsz, self.d_hidden[2]).fill_(self.b_j0),
             # layer out
-            weight.new(bsz, self.out_dim).zero_(),
+            weight.new(bsz, self.d_out).zero_(),
             # sum spike
-            weight.new(bsz, self.out_dim).zero_(),
+            weight.new(bsz, self.d_out).zero_(),
         )
 
     def init_hidden_allzero(self, bsz):
         weight = next(self.parameters()).data
         return (
             # l1
-            weight.new(bsz, self.hidden_dims[0]).zero_(),
-            weight.new(bsz, self.hidden_dims[0]).zero_(),
-            weight.new(bsz, self.hidden_dims[0]).zero_(),
-            weight.new(bsz, self.hidden_dims[0]).fill_(self.b_j0),
+            weight.new(bsz, self.d_hidden[0]).zero_(),
+            weight.new(bsz, self.d_hidden[0]).zero_(),
+            weight.new(bsz, self.d_hidden[0]).zero_(),
+            weight.new(bsz, self.d_hidden[0]).fill_(self.b_j0),
             # l2
-            weight.new(bsz, self.hidden_dims[1]).zero_(),
-            weight.new(bsz, self.hidden_dims[1]).zero_(),
-            weight.new(bsz, self.hidden_dims[1]).zero_(),
-            weight.new(bsz, self.hidden_dims[1]).fill_(self.b_j0),
+            weight.new(bsz, self.d_hidden[1]).zero_(),
+            weight.new(bsz, self.d_hidden[1]).zero_(),
+            weight.new(bsz, self.d_hidden[1]).zero_(),
+            weight.new(bsz, self.d_hidden[1]).fill_(self.b_j0),
             # l3
-            weight.new(bsz, self.hidden_dims[2]).zero_(),
-            weight.new(bsz, self.hidden_dims[2]).zero_(),
-            weight.new(bsz, self.hidden_dims[2]).zero_(),
-            weight.new(bsz, self.hidden_dims[2]).fill_(self.b_j0),
+            weight.new(bsz, self.d_hidden[2]).zero_(),
+            weight.new(bsz, self.d_hidden[2]).zero_(),
+            weight.new(bsz, self.d_hidden[2]).zero_(),
+            weight.new(bsz, self.d_hidden[2]).fill_(self.b_j0),
             # layer out
-            weight.new(bsz, self.out_dim).zero_(),
+            weight.new(bsz, self.d_out).zero_(),
             # sum spike
-            weight.new(bsz, self.out_dim).zero_(),
+            weight.new(bsz, self.d_out).zero_(),
         )
 
-    def clamp_withnoise(
+    def clamp_generate(
         self,
         test_class,
         zeros,
-        h_clamped,
+        hidden_clamped,
         T,
-        noise,
-        index,
         device,
-        batch=False,
         clamp_value=0.5,
+        batch=False,
+        index=None,
+        noise=None,
     ):
         """
         generate representations with mem of read out clamped
@@ -430,40 +567,34 @@ class SnnNetwork3Layer(SnnNetwork):
         log_softmax_hist = []
         h_hist = []
 
-        for t in range(T):
+        for _ in range(T):
             if not batch:
-                h_clamped[-1][0] = -clamp_value
-                h_clamped[-1][0, test_class] = clamp_value
+                hidden_clamped[-1][0] = -clamp_value
+                hidden_clamped[-1][0, test_class] = clamp_value
             else:
-                h_clamped[-1][:, :] = torch.full(h_clamped[-1].size(), -clamp_value).to(
-                    device
-                )
-                h_clamped[-1][:, test_class] = clamp_value
+                hidden_clamped[-1][:, :] = torch.full(hidden_clamped[-1].size(), -clamp_value).to(device)
+                hidden_clamped[-1][:, test_class] = clamp_value
 
             if noise is not None:
-                h_clamped[index][:, :] += noise * h_clamped[index][:, :]
+                if index is not None:
+                    hidden_clamped[index][:, :] += noise * hidden_clamped[index][:, :]
+                else:
+                    hidden_clamped[-1][:] += noise
 
-            # if t==0:
-            #     print(h_clamped[-1])
-
-            log_softmax, h_clamped = self.forward(zeros, h_clamped)
+            log_softmax, hidden_clamped, _ = self.forward(zeros, hidden_clamped)
 
             log_softmax_hist.append(log_softmax)
-            h_hist.append(h_clamped)
+            h_hist.append(hidden_clamped)
 
         return log_softmax_hist, h_hist
 
     def get_energy(self):
         return (
-            torch.sum(torch.abs(self.error1))
-            + torch.sum(torch.abs(self.error2))
-            + torch.sum(torch.abs(self.error3))
-        ) / sum(self.hidden_dims)
+            torch.sum(torch.abs(self.error1)) + torch.sum(torch.abs(self.error2)) + torch.sum(torch.abs(self.error3))
+        ) / sum(self.d_hidden)
 
     def get_spike_loss(self, h):
-        return (torch.sum(h[1]) + torch.sum(h[5]) + torch.sum(h[9])) / sum(
-            self.hidden_dims
-        )
+        return (torch.sum(h[1]) + torch.sum(h[5]) + torch.sum(h[9])) / sum(self.d_hidden)
 
     def reset_errors(self):
         self.error1 = 0
