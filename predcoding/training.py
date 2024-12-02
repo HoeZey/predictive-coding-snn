@@ -1,4 +1,5 @@
 import torch
+import torch.nn.functional as F
 
 
 def get_stats_named_params(model):
@@ -15,7 +16,7 @@ def get_stats_named_params(model):
 
 def post_optimizer_updates(named_params, alpha, beta):
     for name in named_params:
-        param, sm, lm, dm = named_params[name]
+        param, sm, lm, _ = named_params[name]
         lm.data.add_(-alpha * (param - sm))
         sm.data.mul_((1.0 - beta))
         sm.data.add_(beta * param - (beta / alpha) * lm)
@@ -54,7 +55,9 @@ def train_fptt(
     spike_alpha,
     clip,
     lr,
-    device,
+    alpha,
+    beta,
+    rho,
 ):
     train_loss = 0
     total_clf_loss = 0
@@ -68,93 +71,68 @@ def train_fptt(
     for batch_idx, (data, target) in enumerate(train_loader):
 
         # to device and reshape
-        data, target = data.to(device), target.to(device)
+        data, target = data.to(model.device), target.to(model.device)
         data = data.view(-1, model.in_dim)
 
         B = target.size()[0]
 
-        for p in range(time_steps):
+        for t in range(time_steps):
 
-            if p == 0:
+            if t == 0:
                 h = model.init_hidden(data.size(0))
-            elif p % omega == 0:
+            elif t % omega == 0:
                 h = tuple(v.detach() for v in h)
 
             o, h = model.forward(data, h)
-            # wandb.log({
-            #         'rec layer adap threshold': h[5].detach().cpu().numpy(),
-            #         'rec layer mem potential': h[3].detach().cpu().numpy()
-            #     })
 
             # get prediction
-            if p == (time_steps - 1):
+            if t == (time_steps - 1):
                 pred = o.data.max(1, keepdim=True)[1]
                 correct += pred.eq(target.data.view_as(pred)).cpu().sum()
 
-            if p % omega == 0 and p > 0:
-                optimizer.zero_grad()
+            # only update model every omega steps
+            if not (t % omega == 0 and t > 0):
+                continue
 
-                # classification loss
-                clf_loss = (p + 1) / k_updates * F.nll_loss(o, target)
-                # clf_loss = snr*F.cross_entropy(output, target,reduction='none')
-                # clf_loss = torch.mean(clf_loss)
+            optimizer.zero_grad()
 
-                # regularizer loss
-                regularizer = get_regularizer_named_params(named_params, _lambda=1.0)
+            # classification loss
+            clf_loss = (t + 1) / k_updates * F.nll_loss(o, target)
+            # clf_loss = snr*F.cross_entropy(output, target,reduction='none')
+            # clf_loss = torch.mean(clf_loss)
 
-                # mem potential loss take l1 norm / num of neurons /batch size
-                if len(model.hidden_dims) == 2:
-                    energy = (
-                        (torch.sum(model.error1**2) + torch.sum(model.error2**2))
-                        / B
-                        / sum(model.hidden_dims)
-                    )
-                    spike_loss = (
-                        (torch.sum(h[1]) + torch.sum(h[5])) / B / sum(model.hidden_dims)
-                    )
-                elif len(model.hidden_dims) == 3:
-                    # energy = (torch.sum(model.error1 ** 2) + torch.sum(model.error2 ** 2) + torch.sum(model.error3 ** 2)) / B / sum(model.hidden_dims)
-                    energy = (
-                        (
-                            torch.sum(torch.abs(model.error1))
-                            + torch.sum(torch.abs(model.error2))
-                            + torch.sum(torch.abs(model.error3))
-                        )
-                        / B
-                        / sum(model.hidden_dims)
-                    )
-                    spike_loss = (
-                        (torch.sum(h[1]) + torch.sum(h[5]) + torch.sum(h[9]))
-                        / B
-                        / sum(model.hidden_dims)
-                    )
+            # regularizer loss
+            regularizer = get_regularizer_named_params(
+                named_params, model.device, alpha, rho, _lambda=1.0
+            )
 
-                # overall loss
-                loss = (
-                    clf_alpha * clf_loss
-                    + regularizer
-                    + energy_alpha * energy
-                    + spike_alpha * spike_loss
-                )
+            # mem potential loss take l1 norm / num of neurons /batch size
+            energy = model.get_energy() / B
+            spike_loss = model.get_spike_loss(h) / B
 
-                loss.backward()
+            # overall loss
+            loss = (
+                clf_alpha * clf_loss
+                + regularizer
+                + energy_alpha * energy
+                + spike_alpha * spike_loss
+            )
 
-                if clip > 0:
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
+            loss.backward()
 
-                optimizer.step()
-                post_optimizer_updates(named_params)
+            if clip > 0:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
 
-                train_loss += loss.item()
-                total_clf_loss += clf_loss.item()
-                total_regularizaton_loss += regularizer  # .item()
-                total_energy_loss += energy.item()
-                total_spike_loss += spike_loss.item()
+            optimizer.step()
+            post_optimizer_updates(named_params, alpha, beta)
 
-                model.error1 = 0
-                model.error2 = 0
-                if len(model.hidden_dims) == 3:
-                    model.error3 = 0
+            train_loss += loss.item()
+            total_clf_loss += clf_loss.item()
+            total_regularizaton_loss += regularizer  # .item()
+            total_energy_loss += energy.item()
+            total_spike_loss += spike_loss.item()
+
+            model.reset_errors()
 
         if batch_idx > 0 and batch_idx % log_interval == (log_interval - 1):
             print(

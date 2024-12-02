@@ -16,6 +16,8 @@ class SnnLayer(nn.Module):
         is_rec: bool,
         is_adapt: bool,
         one_to_one: bool,
+        baseline_threshold,
+        device,
         tau_m_init=15.0,
         tau_adap_init=20,
         tau_a_init=15.0,
@@ -30,6 +32,7 @@ class SnnLayer(nn.Module):
         self.is_adapt = is_adapt
         self.one_to_one = one_to_one
         self.dt = dt
+        self.baseline_threshold = baseline_threshold
 
         if is_rec:
             self.rec_w = nn.Linear(hidden_dim, hidden_dim, bias=bias)
@@ -69,9 +72,7 @@ class SnnLayer(nn.Module):
 
         self.sigmoid = nn.Sigmoid()
 
-    def mem_update(
-        self, ff, fb, soma, spike, a_curr, b, is_adapt, baseline_thre=b_j0, r_m=3
-    ):
+    def mem_update(self, ff, fb, soma, spike, a_curr, b, is_adapt, r_m=3):
         """
         mem update for each layer of neurons
         :param ff: feedforward signal
@@ -95,7 +96,7 @@ class SnnLayer(nn.Module):
             beta = 0.0
 
         b = rho * b + (1 - rho) * spike  # adaptive contribution
-        new_thre = baseline_thre + beta * b  # udpated threshold
+        new_thre = self.baseline_threshold + beta * b  # udpated threshold
 
         a_new = eta * a_curr + fb  # fb into apical tuft
 

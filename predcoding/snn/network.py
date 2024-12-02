@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from predcoding.snn.layer import OutputLayer, SnnLayer
 
 
@@ -14,6 +15,8 @@ class SnnNetwork(nn.Module):
         one_to_one: bool,
         dp_rate: float,
         is_rec: bool,
+        b_j0: float,
+        device: str,
         bias=True,
     ):
         super(SnnNetwork, self).__init__()
@@ -24,6 +27,8 @@ class SnnNetwork(nn.Module):
         self.is_adapt = is_adapt
         self.one_to_one = one_to_one
         self.is_rec = is_rec
+        self.b_j0 = b_j0
+        self.device = device
 
         self.dp = nn.Dropout(dp_rate)
 
@@ -34,6 +39,8 @@ class SnnNetwork(nn.Module):
             is_adapt=is_adapt,
             one_to_one=one_to_one,
             bias=bias,
+            device=device,
+            baseline_threshold=b_j0,
         )
 
         # r in to r out
@@ -51,6 +58,8 @@ class SnnNetwork(nn.Module):
             is_adapt=is_adapt,
             one_to_one=one_to_one,
             bias=bias,
+            device=device,
+            baseline_threshold=b_j0,
         )
 
         self.output_layer = OutputLayer(hidden_dims[1], out_dim, is_fc=True, bias=bias)
@@ -137,7 +146,14 @@ class SnnNetwork(nn.Module):
         return log_softmax_hist, h_hist
 
     def clamped_generate(
-        self, test_class, zeros, h_clamped, T, clamp_value=0.5, batch=False, noise=None
+        self,
+        test_class,
+        zeros,
+        h_clamped,
+        T,
+        clamp_value=0.5,
+        batch=False,
+        noise=None,
     ):
         """
         generate representations with mem of read out clamped
@@ -157,7 +173,7 @@ class SnnNetwork(nn.Module):
                 h_clamped[-1][0, test_class] = clamp_value
             else:
                 h_clamped[-1][:, :] = torch.full(h_clamped[-1].size(), -clamp_value).to(
-                    device
+                    self.device
                 )
                 h_clamped[-1][:, test_class] = clamp_value
 
@@ -181,17 +197,27 @@ class SnnNetwork(nn.Module):
             weight.new(bsz, self.hidden_dims[0]).uniform_(),
             weight.new(bsz, self.hidden_dims[0]).zero_(),
             weight.new(bsz, self.hidden_dims[0]).zero_(),
-            weight.new(bsz, self.hidden_dims[0]).fill_(b_j0),
+            weight.new(bsz, self.hidden_dims[0]).fill_(self.b_j0),
             # p
             weight.new(bsz, self.hidden_dims[1]).uniform_(),
             weight.new(bsz, self.hidden_dims[1]).zero_(),
             weight.new(bsz, self.hidden_dims[1]).zero_(),
-            weight.new(bsz, self.hidden_dims[1]).fill_(b_j0),
+            weight.new(bsz, self.hidden_dims[1]).fill_(self.b_j0),
             # layer out
             weight.new(bsz, self.out_dim).zero_(),
             # sum spike
             weight.new(bsz, self.out_dim).zero_(),
         )
+
+    def get_energy(self):
+        return torch.sum(self.error1**2) + torch.sum(self.error2**2)
+
+    def get_spike_loss(self, h):
+        return torch.sum(h[1]) + torch.sum(h[5])
+
+    def reset_errors(self):
+        self.error1 = 0
+        self.error2 = 0
 
 
 # 3 hidden layers
@@ -205,10 +231,20 @@ class SnnNetwork3Layer(SnnNetwork):
         one_to_one: bool,
         dp_rate: float,
         is_rec: bool,
+        b_j0: float,
+        device: str,
         bias=True,
     ):
         super().__init__(
-            in_dim, hidden_dims, out_dim, is_adapt, one_to_one, dp_rate, is_rec
+            in_dim,
+            hidden_dims,
+            out_dim,
+            is_adapt,
+            one_to_one,
+            dp_rate,
+            is_rec,
+            b_j0,
+            device,
         )
 
         self.layer3 = SnnLayer(
@@ -217,7 +253,9 @@ class SnnNetwork3Layer(SnnNetwork):
             is_rec=is_rec,
             is_adapt=is_adapt,
             one_to_one=one_to_one,
+            device=device,
             bias=bias,
+            baseline_threshold=b_j0,
         )
 
         self.layer2to3 = nn.Linear(hidden_dims[1], hidden_dims[2], bias=bias)
@@ -325,17 +363,17 @@ class SnnNetwork3Layer(SnnNetwork):
             weight.new(bsz, self.hidden_dims[0]).uniform_(),
             weight.new(bsz, self.hidden_dims[0]).zero_(),
             weight.new(bsz, self.hidden_dims[0]).zero_(),
-            weight.new(bsz, self.hidden_dims[0]).fill_(b_j0),
+            weight.new(bsz, self.hidden_dims[0]).fill_(self.b_j0),
             # l2
             weight.new(bsz, self.hidden_dims[1]).uniform_(),
             weight.new(bsz, self.hidden_dims[1]).zero_(),
             weight.new(bsz, self.hidden_dims[1]).zero_(),
-            weight.new(bsz, self.hidden_dims[1]).fill_(b_j0),
+            weight.new(bsz, self.hidden_dims[1]).fill_(self.b_j0),
             # l3
             weight.new(bsz, self.hidden_dims[2]).uniform_(),
             weight.new(bsz, self.hidden_dims[2]).zero_(),
             weight.new(bsz, self.hidden_dims[2]).zero_(),
-            weight.new(bsz, self.hidden_dims[2]).fill_(b_j0),
+            weight.new(bsz, self.hidden_dims[2]).fill_(self.b_j0),
             # layer out
             weight.new(bsz, self.out_dim).zero_(),
             # sum spike
@@ -349,17 +387,17 @@ class SnnNetwork3Layer(SnnNetwork):
             weight.new(bsz, self.hidden_dims[0]).zero_(),
             weight.new(bsz, self.hidden_dims[0]).zero_(),
             weight.new(bsz, self.hidden_dims[0]).zero_(),
-            weight.new(bsz, self.hidden_dims[0]).fill_(b_j0),
+            weight.new(bsz, self.hidden_dims[0]).fill_(self.b_j0),
             # l2
             weight.new(bsz, self.hidden_dims[1]).zero_(),
             weight.new(bsz, self.hidden_dims[1]).zero_(),
             weight.new(bsz, self.hidden_dims[1]).zero_(),
-            weight.new(bsz, self.hidden_dims[1]).fill_(b_j0),
+            weight.new(bsz, self.hidden_dims[1]).fill_(self.b_j0),
             # l3
             weight.new(bsz, self.hidden_dims[2]).zero_(),
             weight.new(bsz, self.hidden_dims[2]).zero_(),
             weight.new(bsz, self.hidden_dims[2]).zero_(),
-            weight.new(bsz, self.hidden_dims[2]).fill_(b_j0),
+            weight.new(bsz, self.hidden_dims[2]).fill_(self.b_j0),
             # layer out
             weight.new(bsz, self.out_dim).zero_(),
             # sum spike
@@ -414,3 +452,20 @@ class SnnNetwork3Layer(SnnNetwork):
             h_hist.append(h_clamped)
 
         return log_softmax_hist, h_hist
+
+    def get_energy(self):
+        return (
+            torch.sum(torch.abs(self.error1))
+            + torch.sum(torch.abs(self.error2))
+            + torch.sum(torch.abs(self.error3))
+        ) / sum(self.hidden_dims)
+
+    def get_spike_loss(self, h):
+        return (torch.sum(h[1]) + torch.sum(h[5]) + torch.sum(h[9])) / sum(
+            self.hidden_dims
+        )
+
+    def reset_errors(self):
+        self.error1 = 0
+        self.error2 = 0
+        self.error3 = 0

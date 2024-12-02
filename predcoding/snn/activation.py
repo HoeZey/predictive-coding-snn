@@ -1,8 +1,6 @@
 import torch
 import math
 
-b_j0 = 0.1  # neural threshold baseline
-R_m = 3  # membrane resistance
 gamma = 0.5  # gradient scale
 lens = 0.5
 
@@ -16,6 +14,10 @@ def gaussian(x, mu=0.0, sigma=0.5):
 
 
 class ActFun_adp(torch.autograd.Function):
+    def __init__(self, lens, gamma):
+        self.lens = lens
+        self.gamma = gamma
+        super().__init__()
 
     @staticmethod
     def forward(ctx, input):  # input = membrane potential- threshold
@@ -29,12 +31,12 @@ class ActFun_adp(torch.autograd.Function):
         (input,) = ctx.saved_tensors
         grad_input = grad_output.clone()
 
-        # temp = abs(input) < lens
+        # temp = abs(input) < self.lens
 
         scale = 6.0
         hight = 0.15
 
-        # temp = torch.exp(-(input**2)/(2*lens**2))/torch.sqrt(2*torch.tensor(math.pi))/lens
+        # temp = torch.exp(-(input**2)/(2*self.lens**2))/torch.sqrt(2*torch.tensor(math.pi))/self.lens
         temp = (
             gaussian(input, mu=0.0, sigma=lens) * (1.0 + hight)
             - gaussian(input, mu=lens, sigma=scale * lens) * hight

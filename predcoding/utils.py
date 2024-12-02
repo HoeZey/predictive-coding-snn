@@ -6,11 +6,10 @@ def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 
-def save_checkpoint(state, is_best, prefix, filename="_rec2_bias_checkpoint.pth.tar"):
+def save_checkpoint(state, prefix, filename="_rec2_bias_checkpoint.pth.tar"):
     print("saving at ", prefix + filename)
     torch.save(state, prefix + filename)
-    if is_best:
-        shutil.copyfile(prefix + filename, prefix + "_rec2_bias_model_best.pth.tar")
+    shutil.copyfile(prefix + filename, prefix + "_rec2_bias_model_best.pth.tar")
 
 
 def model_result_dict_load(fn):
