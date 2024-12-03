@@ -1,8 +1,9 @@
 import torch
 import torch.nn.functional as F
+from predcoding.snn.network import EnergySNN
 
 
-def get_stats_named_params(model):
+def get_stats_named_params(model: EnergySNN):
     named_params = {}
     for name, param in model.named_parameters():
         sm, lm, dm = (
@@ -44,7 +45,7 @@ def train_fptt(
     batch_size,
     log_interval,
     train_loader,
-    model,
+    model: EnergySNN,
     named_params,
     time_steps,
     k_updates,
@@ -72,18 +73,18 @@ def train_fptt(
 
         # to device and reshape
         data, target = data.to(model.device), target.to(model.device)
-        data = data.view(-1, model.in_dim)
+        data = data.view(-1, model.d_in)
 
         B = target.size()[0]
 
         for t in range(time_steps):
 
             if t == 0:
-                h = model.init_hidden(data.size(0))
-            elif t % omega == 0:
-                h = tuple(v.detach() for v in h)
+                h, readout = model.init_hidden(data.size(0))
+            else:
+                h, readout = [v.detach() for v in h], readout.detach()
 
-            o, h = model.forward(data, h)
+            o, h, readout = model.forward(data, h, readout)
 
             # get prediction
             if t == (time_steps - 1):
@@ -102,21 +103,14 @@ def train_fptt(
             # clf_loss = torch.mean(clf_loss)
 
             # regularizer loss
-            regularizer = get_regularizer_named_params(
-                named_params, model.device, alpha, rho, _lambda=1.0
-            )
+            regularizer = get_regularizer_named_params(named_params, model.device, alpha, rho, _lambda=1.0)
 
             # mem potential loss take l1 norm / num of neurons /batch size
-            energy = model.get_energy() / B
-            spike_loss = model.get_spike_loss(h) / B
+            energy = model.get_energies() / B
+            spike_loss = model.get_spike_loss(histories=h) / B
 
             # overall loss
-            loss = (
-                clf_alpha * clf_loss
-                + regularizer
-                + energy_alpha * energy
-                + spike_alpha * spike_loss
-            )
+            loss = clf_alpha * clf_loss + regularizer + energy_alpha * energy + spike_alpha * spike_loss
 
             loss.backward()
 
@@ -132,7 +126,7 @@ def train_fptt(
             total_energy_loss += energy.item()
             total_spike_loss += spike_loss.item()
 
-            model.reset_errors()
+            model.reset_energies()
 
         if batch_idx > 0 and batch_idx % log_interval == (log_interval - 1):
             print(
@@ -148,8 +142,8 @@ def train_fptt(
                     train_loss / log_interval,
                     total_clf_loss / log_interval,
                     total_regularizaton_loss / log_interval,
-                    model.fr_layer2 / time_steps / log_interval,
-                    model.fr_layer1 / time_steps / log_interval,
+                    model.firing_rates[0] / time_steps / log_interval,
+                    model.firing_rates[1] / time_steps / log_interval,
                 )
             )
 
@@ -159,8 +153,4 @@ def train_fptt(
             total_energy_loss = 0
             total_spike_loss = 0
             correct = 0
-            # model.network.fr = 0
-            model.fr_layer2 = 0
-            model.fr_layer1 = 0
-            if len(model.hidden_dims) == 3:
-                model.fr_layer3 = 0
+            model.reset_firing_rates()

@@ -14,22 +14,33 @@ from predcoding.experiments.eval import test
 from predcoding.experiments.decoder import train_linear_proj
 from predcoding.utils import count_parameters, save_checkpoint
 
+
 def main():
     # set seed
     torch.manual_seed(999)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(device)
 
-    transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5), (0.5))])
+    transform = transforms.Compose(
+        [transforms.ToTensor(), transforms.Normalize((0.5), (0.5))]
+    )
 
     batch_size = 200
 
-    traindata = torchvision.datasets.MNIST(root="./data", train=True, download=True, transform=transform)
-    testdata = torchvision.datasets.MNIST(root="./data", train=False, download=True, transform=transform)
+    traindata = torchvision.datasets.MNIST(
+        root="./data", train=True, download=True, transform=transform
+    )
+    testdata = torchvision.datasets.MNIST(
+        root="./data", train=False, download=True, transform=transform
+    )
 
     # data loading
-    train_loader = torch.utils.data.DataLoader(traindata, batch_size=batch_size, shuffle=False, num_workers=2)
-    test_loader = torch.utils.data.DataLoader(testdata, batch_size=batch_size, shuffle=False, num_workers=2)
+    train_loader = torch.utils.data.DataLoader(
+        traindata, batch_size=batch_size, shuffle=False, num_workers=2
+    )
+    test_loader = torch.utils.data.DataLoader(
+        testdata, batch_size=batch_size, shuffle=False, num_workers=2
+    )
 
     # network parameters
     adap_neuron = True  # whether use adaptive neuron or not
@@ -42,9 +53,9 @@ def main():
     alg = "fptt"
     dp = 0.4
     is_rec = False
-    b_j0 = 0.1      # neural threshold baseline
-    R_m = 3         # membrane resistance
-    gamma = 0.5     # gradient scale
+    b_j0 = 0.1  # neural threshold baseline
+    R_m = 3  # membrane resistance
+    gamma = 0.5  # gradient scale
     lens = 0.5
     baseline_threshold = b_j0
 
@@ -57,7 +68,7 @@ def main():
     epochs = 35
     alpha = 0.2
     beta = 0.5
-    rho = 0.0 
+    rho = 0.0
 
     # set input and t param
     IN_dim = 784
@@ -73,8 +84,8 @@ def main():
         one_to_one=onetoone,
         dp_rate=dp,
         is_rec=is_rec,
-        b_j0=b_j0,
-        device=device
+        b0=b_j0,
+        device=device,
     )
     model.to(device)
     # print(model)
@@ -114,7 +125,7 @@ def main():
             lr,
             alpha,
             beta,
-            rho
+            rho,
         )
 
         reset_named_params(named_params)
@@ -143,7 +154,6 @@ def main():
 
     model.eval()
     test(model, test_loader, T)
-
 
 
 if __name__ == "main":

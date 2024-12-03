@@ -1,10 +1,11 @@
 import torch
 import torch.nn.functional as F
 from tqdm import tqdm
+from predcoding.snn.network import EnergySNN
 
 
 # test function
-def test(model, test_loader, time_steps):
+def test(model: EnergySNN, test_loader, time_steps):
     model.eval()
     test_loss = 0
     correct = 0
@@ -12,17 +13,15 @@ def test(model, test_loader, time_steps):
     # for data, target in test_loader:
     for data, target in tqdm(test_loader):
         data, target = data.to(model.device), target.to(model.device)
-        data = data.view(-1, model.in_dim)
+        data = data.view(-1, model.d_in)
 
         with torch.no_grad():
             model.eval()
-            hidden = model.init_hidden(data.size(0))
+            h, readout = model.init_hidden(data.size(0))
 
-            log_softmax_outputs, hidden = model.inference(data, hidden, time_steps)
+            log_softmax_outputs, _ = model.inference(data, h, readout, time_steps)
 
-            test_loss += F.nll_loss(
-                log_softmax_outputs[-1], target, reduction="sum"
-            ).data.item()
+            test_loss += F.nll_loss(log_softmax_outputs[-1], target, reduction="sum").data.item()
 
             pred = log_softmax_outputs[-1].data.max(1, keepdim=True)[1]
 

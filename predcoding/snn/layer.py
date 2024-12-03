@@ -97,7 +97,7 @@ class SNNLayer(nn.Module):
 
         return soma_new, spike, a_new, new_thre, b
 
-    def forward(self, ff, fb, soma_t, spk_t, a_curr_t, b_t):
+    def forward(self, ff, fb, soma_t, spike_t, a_curr_t, b_t):
         """
         forward function of a single layer. given previous neuron states and current input, update neuron states
 
@@ -111,24 +111,22 @@ class SNNLayer(nn.Module):
         if self.is_recurrent:
             self.rec_w.weight.data = self.rec_w.weight.data * self.weight_mask
             # self.rec_w.weight.data = (self.rec_w.weight.data < 0).float() * self.rec_w.weight.data
-            r_in = ff + self.rec_w(spk_t)
+            r_in = ff + self.rec_w(spike_t)
         else:
             if self.one_to_one:
                 r_in = ff
             else:
                 r_in = self.fc_weights(ff)
 
-        soma_t1, spk_t1, a_curr_t1, _, b_t1 = self.mem_update(
-            r_in, fb, soma_t, spk_t, a_curr_t, b_t, self.is_adaptive
+        soma_t1, spike_t1, a_curr_t1, _, b_t1 = self.mem_update(
+            r_in, fb, soma_t, spike_t, a_curr_t, b_t, self.is_adaptive
         )
 
-        return soma_t1, spk_t1, a_curr_t1, b_t1
+        return soma_t1, spike_t1, a_curr_t1, b_t1
 
 
 class OutputLayer(nn.Module):
-    def __init__(
-        self, d_in: int, d_out: int, is_fc: bool, tau_fixed=None, bias=True, dt=0.5
-    ):
+    def __init__(self, d_in: int, d_out: int, is_fc: bool, tau_fixed=None, bias=True, dt=0.5):
         """
         output layer class
         :param is_fc: whether integrator is fc to r_out in rec or not
@@ -166,9 +164,7 @@ class OutputLayer(nn.Module):
         if self.is_fc:
             x_t = self.fc(x_t)
         else:
-            x_t = x_t.view(-1, 10, int(self.d_in / 10)).mean(
-                dim=2
-            )  # sum up population spike
+            x_t = x_t.view(-1, 10, int(self.d_in / 10)).mean(dim=2)  # sum up population spike
 
         # d_mem = -soma_t + x_t
         mem = (mem_t + x_t) * alpha

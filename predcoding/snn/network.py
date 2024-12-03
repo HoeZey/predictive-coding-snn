@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from dataclasses import dataclass
-from abc import ABC, abstractmethod
 from predcoding.snn.layer import OutputLayer, SNNLayer
 
 
@@ -13,8 +12,20 @@ class LayerHistory:
     dendrites: torch.FloatTensor | float
     b: torch.FloatTensor | float
 
+    @classmethod
+    def get_layer_history(cls, n_batch: int, d: int, b0: float, all_zero=False):
+        return cls(
+            soma=torch.rand(n_batch, d) if not all_zero else torch.zeros(n_batch, d),
+            spikes=torch.zeros(n_batch, d),
+            dendrites=torch.zeros(n_batch, d),
+            b=torch.full((n_batch, d), b0),
+        )
 
-class SNN(nn.Module):
+    def detach(self):
+        return LayerHistory(self.soma.detach(), self.spikes.detach(), self.dendrites.detach(), self.b.detach())
+
+
+class EnergySNN(nn.Module):
     def __init__(
         self,
         d_in: int,
@@ -28,9 +39,12 @@ class SNN(nn.Module):
         device: str,
         bias=True,
     ):
+        super().__init__()
+        self.d_in = d_in
         self.d_hidden = d_hidden
         self.d_out = d_out
         self.b0 = b0
+        self.device = device
 
         self.firing_rates: list[torch.FloatTensor] = [0] * len(d_hidden)
         self.energies: list[torch.FloatTensor] = [0] * len(d_hidden)
@@ -59,7 +73,7 @@ class SNN(nn.Module):
         for d1, d2 in zip(d_hidden, d_hidden[1:]):
             self.forward_connections.append(nn.Linear(d1, d2, bias=bias))
             self.backward_connections.append(nn.Linear(d2, d1, bias=bias))
-        self.backward_connections.append(self.output_layer)
+        self.backward_connections.append(nn.Linear(d_out, d_hidden[-1], bias=bias))
 
         for ff, fb in zip(self.forward_connections, self.backward_connections):
             nn.init.xavier_uniform_(ff.weight)
@@ -86,7 +100,7 @@ class SNN(nn.Module):
             )
         ):
             is_last_layer = i + 1 == len(self.hidden_layers)
-            fb_input = h.spikes if not is_last_layer else F.normalize(readout, dim=1)
+            fb_input = histories[i + 1].spikes if not is_last_layer else F.normalize(readout, dim=1)
 
             soma, spikes, dendrites, b = layer(
                 ff=ff_connections(spikes),
@@ -100,44 +114,112 @@ class SNN(nn.Module):
             h1 = LayerHistory(soma=soma, spikes=spikes, dendrites=dendrites, b=b)
             new_histories.append(h1)
             self.energies[i] = dendrites - soma
-            self.firing_rates[i] += spikes.mean().item()
+            self.firing_rates[i] += spikes.detach().mean().item()
 
-        output = self.output_layer(spikes, readout)
-        log_softmax = F.log_softmax(output, dim=1)
+        readout = self.output_layer.forward(x_t=spikes, mem_t=readout)
+        log_softmax = F.log_softmax(readout, dim=1)
 
-        return log_softmax, new_histories, output
+        return log_softmax, new_histories, readout
 
-    def init_hidden(self, bsz, all_zero=False):
-        weight = next(self.parameters()).data
-        hidden_layer_weights = [
-            [
-                weight.new(bsz, d).uniform_() if not all_zero else weight.new(bsz, d).zero_(),
-                weight.new(bsz, d).zero_(),
-                weight.new(bsz, d).zero_(),
-                weight.new(bsz, d).fill_(self.b0),
-            ]
-            for d in self.d_hidden
-        ]
-        return [w for ws in hidden_layer_weights for w in ws] + [
-            weight.new(bsz, self.d_out).zero_(),  # layer out
-            weight.new(bsz, self.d_out).zero_(),  # sum spike
-        ]
+    def inference(self, x_t, h, readout, T, bystep=None):
+        """
+        only called during inference
+        :param x_t: input
+        :param h: hidden states
+        :param T: sequence length
+        :param bystep: if true, then x_t is a sequence
+        :return:
+        """
+
+        log_softmax_hist = []
+        h_hist = []
+
+        for t in range(T):
+            if bystep is None:
+                log_softmax, h, readout = self.forward(x_t, h, readout)
+            else:
+                log_softmax, h, readout = self.forward(x_t[t], h, readout)
+
+            log_softmax_hist.append(log_softmax)
+            h_hist.append((h, readout))
+
+        return log_softmax_hist, h_hist
+
+    def init_hidden(self, n_batch, all_zero=False) -> tuple[list[LayerHistory], torch.FloatTensor]:
+        histories = [LayerHistory.get_layer_history(n_batch, d, self.b0, all_zero=all_zero) for d in self.d_hidden]
+        return histories, torch.zeros(n_batch, self.d_out)
+        # weight = next(self.parameters()).data
+        # hidden_layer_weights = [
+        #     [
+        #         weight.new(n_batch, d).uniform_() if not all_zero else weight.new(n_batch, d).zero_(),
+        #         weight.new(n_batch, d).zero_(),
+        #         weight.new(n_batch, d).zero_(),
+        #         weight.new(n_batch, d).fill_(self.b0),
+        #     ]
+        #     for d in self.d_hidden
+        # ]
+        # return [w for ws in hidden_layer_weights for w in ws] + [
+        #     weight.new(n_batch, self.d_out).zero_(),  # layer out
+        #     weight.new(n_batch, self.d_out).zero_(),  # sum spike
+        # ]
+
+    def clamped_generate(
+        self,
+        test_class,
+        zeros,
+        hidden_clamped,
+        readout_clamped: torch.Tensor,
+        T,
+        clamp_value=0.5,
+        noise=None,
+    ):
+        """
+        generate representations with mem of read out clamped
+        :param test_class: which class is clamped
+        :param zeros: input containing zeros, absence of input
+        :param h: hidden states
+        :param T: sequence length
+        :param noise: noise values
+        :param index: index in h where noise is added to
+        :return:
+        """
+
+        log_softmax_hist = []
+        h_hist = []
+
+        for _ in range(T):
+            readout_clamped = readout_clamped.fill_(-clamp_value)
+            readout_clamped[:, test_class] = clamp_value
+
+            if noise is not None:
+                readout_clamped[:] += noise
+
+            log_softmax, hidden_clamped, _ = self.forward(zeros, hidden_clamped, readout_clamped)
+
+            log_softmax_hist.append(log_softmax)
+            h_hist.append(hidden_clamped)
+
+        return log_softmax_hist, h_hist
 
     def get_energies(self):
         l_energy = 0
         for e in self.energies:
             l_energy = l_energy + (e**2).sum()
-        return l_energy
+        return l_energy / sum(self.d_hidden)
 
     def get_spike_loss(self, histories: list[LayerHistory]):
         l_spikes = 0
         for h in histories:
             l_spikes = l_spikes + (h.spikes**2).sum()
-        return l_spikes
+        return l_spikes / sum(self.d_hidden)
 
     def reset_energies(self):
         for i in range(len(self.energies)):
-            self.energies[i] = 0
+            self.energies[i] = 0.0
+
+    def reset_firing_rates(self):
+        for i in range(len(self.firing_rates)):
+            self.firing_rates[i] = 0.0
 
 
 # 2 hidden layers
