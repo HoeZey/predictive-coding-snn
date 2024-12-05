@@ -21,26 +21,16 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(device)
 
-    transform = transforms.Compose(
-        [transforms.ToTensor(), transforms.Normalize((0.5), (0.5))]
-    )
+    transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5), (0.5))])
 
     batch_size = 200
 
-    traindata = torchvision.datasets.MNIST(
-        root="./data", train=True, download=True, transform=transform
-    )
-    testdata = torchvision.datasets.MNIST(
-        root="./data", train=False, download=True, transform=transform
-    )
+    traindata = torchvision.datasets.MNIST(root="./data", train=True, download=True, transform=transform)
+    testdata = torchvision.datasets.MNIST(root="./data", train=False, download=True, transform=transform)
 
     # data loading
-    train_loader = torch.utils.data.DataLoader(
-        traindata, batch_size=batch_size, shuffle=False, num_workers=2
-    )
-    test_loader = torch.utils.data.DataLoader(
-        testdata, batch_size=batch_size, shuffle=False, num_workers=2
-    )
+    train_loader = torch.utils.data.DataLoader(traindata, batch_size=batch_size, shuffle=False, num_workers=2)
+    test_loader = torch.utils.data.DataLoader(testdata, batch_size=batch_size, shuffle=False, num_workers=2)
 
     # network parameters
     adap_neuron = True  # whether use adaptive neuron or not
@@ -156,5 +146,5 @@ def main():
     test(model, test_loader, T)
 
 
-if __name__ == "main":
+if __name__ == "__main__":
     main()
