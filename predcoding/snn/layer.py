@@ -31,9 +31,10 @@ class SNNLayer(nn.Module):
         self.one_to_one = one_to_one
         self.dt = dt
         self.baseline_threshold = b0
+        self.device = device
 
         if is_recurrent:
-            self.rec_w = nn.Linear(d_hidden, d_hidden, bias=bias)
+            self.rec_w = nn.Linear(d_hidden, d_hidden, bias=bias, device=device)
             # init weights
             if bias:
                 nn.init.constant_(self.rec_w.bias, 0)
@@ -43,7 +44,7 @@ class SNNLayer(nn.Module):
             self.weight_mask = torch.bernoulli(p)
 
         else:
-            self.fc_weights = nn.Linear(d_in, d_hidden, bias=bias)
+            self.fc_weights = nn.Linear(d_in, d_hidden, bias=bias, device=device)
             if bias:
                 nn.init.constant_(self.fc_weights.bias, 0)
             nn.init.xavier_uniform_(self.fc_weights.weight)
@@ -73,9 +74,9 @@ class SNNLayer(nn.Module):
         # alpha = self.sigmoid(self.tau_m)
         # rho = self.sigmoid(self.tau_adp)
         # eta = self.sigmoid(self.tau_a)
-        alpha = torch.exp(-self.dt / self.tau_m)
-        rho = torch.exp(-self.dt / self.tau_adp)
-        eta = torch.exp(-self.dt / self.tau_a)
+        alpha = torch.exp(-self.dt / self.tau_m).to(self.device)
+        rho = torch.exp(-self.dt / self.tau_adp).to(self.device)
+        eta = torch.exp(-self.dt / self.tau_a).to(self.device)
 
         if is_adapt:
             beta = 1.8

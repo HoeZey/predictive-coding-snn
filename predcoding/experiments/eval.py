@@ -11,7 +11,7 @@ def test(model: EnergySNN, test_loader, time_steps):
     correct = 0
 
     # for data, target in test_loader:
-    for data, target in tqdm(test_loader):
+    for data, target in test_loader:
         data, target = data.to(model.device), target.to(model.device)
         data = data.view(-1, model.d_in)
 
@@ -33,10 +33,6 @@ def test(model: EnergySNN, test_loader, time_steps):
     test_loss /= len(test_loader.dataset)
     test_acc = 100.0 * correct / len(test_loader.dataset)
 
-    print(
-        "\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n".format(
-            test_loss, correct, len(test_loader.dataset), test_acc
-        )
-    )
+    print(f"Test set: Average loss: {test_loss:.4f}, Accuracy: {correct}/{len(test_loader.dataset)} ({test_acc:.2f}%)")
 
     return test_loss, 100.0 * correct / len(test_loader.dataset)

@@ -1,17 +1,12 @@
 import torch
-import torch.nn as nn
 import torch.optim as optim
 import torchvision.transforms as transforms
 import torchvision
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
 from tqdm import tqdm
 
-from predcoding.snn.network import SnnNetwork3Layer
+from predcoding.snn.network import EnergySNN
 from predcoding.training import train_fptt, get_stats_named_params, reset_named_params
 from predcoding.experiments.eval import test
-from predcoding.experiments.decoder import train_linear_proj
 from predcoding.utils import count_parameters, save_checkpoint
 
 
@@ -33,21 +28,15 @@ def main():
     test_loader = torch.utils.data.DataLoader(testdata, batch_size=batch_size, shuffle=False, num_workers=2)
 
     # network parameters
-    adap_neuron = True  # whether use adaptive neuron or not
+    use_alif_neurons = True  # whether use adaptive neuron or not
     clf_alpha = 1
     energy_alpha = 0.05  # - config.clf_alpha
     spike_alpha = 0.0  # energy loss on spikes
-    num_readout = 10
-    onetoone = True
+    one_to_one = True
     lr = 1e-3
-    alg = "fptt"
-    dp = 0.4
-    is_rec = False
-    b_j0 = 0.1  # neural threshold baseline
-    R_m = 3  # membrane resistance
-    gamma = 0.5  # gradient scale
-    lens = 0.5
-    baseline_threshold = b_j0
+    p_dropout = 0.4
+    is_recurrent = False
+    b0 = 0.1  # neural threshold baseline
 
     # training parameters
     T = 50
@@ -61,20 +50,21 @@ def main():
     rho = 0.0
 
     # set input and t param
-    IN_dim = 784
-    hidden_dim = [600, 500, 500]
+    # set input and t param
+    d_in = 784
+    d_hidden = [600, 500, 500]
     n_classes = 10
 
     # define network
-    model = SnnNetwork3Layer(
-        IN_dim,
-        hidden_dim,
-        n_classes,
-        is_adapt=adap_neuron,
-        one_to_one=onetoone,
-        dp_rate=dp,
-        is_rec=is_rec,
-        b0=b_j0,
+    model = EnergySNN(
+        d_in,
+        d_hidden,
+        d_out=n_classes,
+        is_adaptive=use_alif_neurons,
+        one_to_one=one_to_one,
+        p_dropout=p_dropout,
+        is_recurrent=is_recurrent,
+        b0=b0,
         device=device,
     )
     model.to(device)
@@ -82,21 +72,20 @@ def main():
 
     # define new loss and optimiser
     total_params = count_parameters(model)
-    print("total param count %i" % total_params)
+    print(f"Total param count {total_params}")
 
     # define optimiser
     optimizer = optim.Adamax(model.parameters(), lr=lr, weight_decay=0.0001)
     # reduce the learning after 20 epochs by a factor of 10
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=2, gamma=0.5)
 
-    # untrained network
-    test_loss, acc1 = test(model, test_loader, T)
-
     named_params = get_stats_named_params(model)
     all_test_losses = []
     best_acc1 = 0
 
-    for epoch in range(epochs):
+    model.train()
+    for epoch in tqdm(range(epochs), total=epochs):
+        print(f"Epoch {epoch}: ", end="")
         train_fptt(
             epoch,
             batch_size,

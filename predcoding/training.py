@@ -129,23 +129,23 @@ def train_fptt(
             model.reset_energies()
 
         if batch_idx > 0 and batch_idx % log_interval == (log_interval - 1):
-            print(
-                "Train Epoch: {} [{}/{} ({:.0f}%)]\tenerg: {:.6f}\tlr: {:.6f}\ttrain acc:{:.4f}\tLoss: {:.6f}\
-                \tClf: {:.6f}\tReg: {:.6f}\tFr_p: {:.6f}\tFr_r: {:.6f}".format(
-                    epoch,
-                    batch_idx * batch_size,
-                    len(train_loader.dataset),
-                    100.0 * batch_idx / len(train_loader),
-                    total_energy_loss / log_interval,
-                    lr,
-                    100 * correct / (log_interval * B),
-                    train_loss / log_interval,
-                    total_clf_loss / log_interval,
-                    total_regularizaton_loss / log_interval,
-                    model.firing_rates[0] / time_steps / log_interval,
-                    model.firing_rates[1] / time_steps / log_interval,
-                )
-            )
+            # print(
+            #     "Train Epoch: {} [{}/{} ({:.0f}%)]\tenerg: {:.6f}\tlr: {:.6f}\ttrain acc:{:.4f}\tLoss: {:.6f}\
+            #     \tClf: {:.6f}\tReg: {:.6f}\tFr_p: {:.6f}\tFr_r: {:.6f}".format(
+            #         epoch,
+            #         batch_idx * batch_size,
+            #         len(train_loader.dataset),
+            #         100.0 * batch_idx / len(train_loader),
+            #         total_energy_loss / log_interval,
+            #         lr,
+            #         100 * correct / (log_interval * B),
+            #         train_loss / log_interval,
+            #         total_clf_loss / log_interval,
+            #         total_regularizaton_loss / log_interval,
+            #         model.firing_rates[0] / time_steps / log_interval,
+            #         model.firing_rates[1] / time_steps / log_interval,
+            #     )
+            # )
 
             train_loss = 0
             total_clf_loss = 0
