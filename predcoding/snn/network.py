@@ -141,7 +141,7 @@ class EnergySNN(nn.Module):
                 log_softmax, h, readout = self.forward(x_t[t], h, readout)
 
             log_softmax_hist.append(log_softmax)
-            h_hist.append((h, readout))
+            h_hist.append(h)
 
         return log_softmax_hist, h_hist
 
@@ -194,7 +194,7 @@ class EnergySNN(nn.Module):
             if noise is not None:
                 readout_clamped[:] += noise
 
-            log_softmax, hidden_clamped, _ = self.forward(zeros, hidden_clamped, readout_clamped)
+            log_softmax, hidden_clamped, readout_clamped = self.forward(zeros, hidden_clamped, readout_clamped)
 
             log_softmax_hist.append(log_softmax)
             h_hist.append(hidden_clamped)

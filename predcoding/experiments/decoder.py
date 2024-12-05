@@ -3,17 +3,19 @@ import torch.nn as nn
 import torch.optim as optim
 import matplotlib.pyplot as plt
 import numpy as np
+from tqdm import tqdm
+from predcoding.snn.network import EnergySNN
 
 
 # linear decoder, but change the following class to other decoder types if necessary
 class LinearReadout(nn.Module):
-    def __init__(self, in_dim, hidden_dim, out_dim):
+    def __init__(self, d_in, d_hidden, d_out):
         super(LinearReadout, self).__init__()
-        self.in_dim = in_dim
-        self.out_dim = out_dim
-        self.hidden_dim = hidden_dim
+        self.d_in = d_in
+        self.d_out = d_out
+        self.d_hidden = d_hidden
 
-        self.fc1 = nn.Linear(in_dim, out_dim)
+        self.fc1 = nn.Linear(d_in, d_out)
         # self.fc2 = nn.Linear(hidden_dim, hidden_dim)
         # self.fc3 = nn.Linear(hidden_dim, out_dim)
 
@@ -29,9 +31,7 @@ class LinearReadout(nn.Module):
         return x
 
 
-def get_states(
-    hiddens_all_: list, idx: int, hidden_dim_: int, batch_size, T=20, num_samples=10000
-):
+def get_states(hiddens_all_: list, layer: int, d_hidden: int, batch_size, T=20, num_samples=10000):
     """
     get a particular internal state depending on index passed to hidden
 
@@ -51,7 +51,7 @@ def get_states(
         for t in range(T):
             seq_ = []
             for b in range(batch_size):
-                seq_.append(hiddens_all_[batch_idx][t][idx][b].detach().cpu().numpy())
+                seq_.append(hiddens_all_[batch_idx][t][layer].spikes[b].detach().cpu().numpy())
             seq_ = np.stack(seq_)
             batch_.append(seq_)
         batch_ = np.stack(batch_)
@@ -60,12 +60,12 @@ def get_states(
 
     all_states = np.stack(all_states)
 
-    return all_states.transpose(0, 2, 1, 3).reshape(num_samples, T, hidden_dim_)
+    return all_states.transpose(0, 2, 1, 3).reshape(num_samples, T, d_hidden)
 
 
 def train_linear_proj(
     layer,
-    model,
+    model: EnergySNN,
     data_loader,
     d_hidden,
     d_in,
@@ -79,19 +79,18 @@ def train_linear_proj(
 
     loss_log = []
 
-    for e in range(20):
+    for e in tqdm(range(20)):
         for i, (data, target) in enumerate(data_loader):
             data, target = data.to(device), target.to(device)
-            data = data.view(-1, model.in_dim)
+            data = data.view(-1, model.d_in)
 
             with torch.no_grad():
                 model.eval()
 
-                hidden = model.init_hidden(data.size(0))
+                hidden, readout = model.init_hidden(data.size(0))
 
-                _, h = model.inference(data, hidden, T)
-
-            spks = get_states([h], 1 + layer * 4, d_hidden, batch_size, T, batch_size)
+                _, h = model.inference(data, hidden, readout, T)
+            spks = get_states([h], layer + 1, d_hidden, batch_size, T, batch_size)
 
             train_data = torch.tensor(spks.mean(axis=1)).to(device)
             # print(train_data.size())
