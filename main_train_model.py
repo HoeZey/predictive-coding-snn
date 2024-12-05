@@ -121,7 +121,7 @@ def main():
             save_checkpoint(
                 {
                     "epoch": epoch + 1,
-                    "state_dict": model.state_dict(),
+                    "state_dict": model.detach().cpu().state_dict(),
                     "best_acc1": best_acc1,
                     "optimizer": optimizer.state_dict(),
                 },
