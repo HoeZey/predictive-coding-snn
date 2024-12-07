@@ -2,6 +2,7 @@ import torch
 import torch.nn.functional as F
 from predcoding.snn.network import EnergySNN
 from predcoding.experiments.decoder import LinearReadout, get_states
+from torch.utils.data import DataLoader
 
 
 def get_stats_named_params(model: EnergySNN):
@@ -42,29 +43,29 @@ def reset_named_params(named_params):
 
 
 def train_fptt(
-    epoch,
-    batch_size,
-    log_interval,
-    train_loader,
+    epoch: int,
+    batch_size: int,
+    log_interval: int,
+    train_loader: DataLoader,
     model: EnergySNN,
     named_params,
-    time_steps,
-    k_updates,
-    omega,
-    optimizer,
-    clf_alpha,
-    energy_alpha,
-    spike_alpha,
-    clip,
-    lr,
-    alpha,
-    beta,
-    rho,
+    time_steps: int,
+    k_updates: int,
+    omega: int,
+    optimizer: torch.optim.Optimizer,
+    clf_alpha: float,
+    energy_alpha: float,
+    spike_alpha: float,
+    clip: float,
+    lr: float,
+    alpha: float,
+    beta: float,
+    rho: float,
     # decoder
     self_supervised=False,
     decoder: LinearReadout = None,
-    decoder_layer=None,
-    recon_alpha=None,
+    decoder_layer: int = None,
+    recon_alpha: float = None,
 ):
     self_supervised = recon_alpha != 0.0
     train_loss = 0
