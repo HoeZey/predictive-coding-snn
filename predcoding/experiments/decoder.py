@@ -9,7 +9,7 @@ from predcoding.snn.network import EnergySNN
 
 # linear decoder, but change the following class to other decoder types if necessary
 class LinearReadout(nn.Module):
-    def __init__(self, d_in, d_hidden, d_out):
+    def __init__(self, d_in, d_out, d_hidden=None):
         super(LinearReadout, self).__init__()
         self.d_in = d_in
         self.d_out = d_out
@@ -75,7 +75,7 @@ def train_linear_proj(
     device,
     fn_loss=nn.MSELoss(),
 ):
-    mlp = LinearReadout(d_hidden, 700, d_in).to(device)
+    mlp = LinearReadout(d_hidden, d_in, model.d_hidden[layer]).to(device)
     optimiser = optim.Adam(mlp.parameters(), lr=0.001, weight_decay=0.0001)
 
     loss_log = []

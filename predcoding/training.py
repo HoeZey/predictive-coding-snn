@@ -1,6 +1,7 @@
 import torch
 import torch.nn.functional as F
 from predcoding.snn.network import EnergySNN
+from predcoding.experiments.decoder import LinearReadout, get_states
 
 
 def get_stats_named_params(model: EnergySNN):
@@ -59,7 +60,12 @@ def train_fptt(
     alpha,
     beta,
     rho,
+    # decoder
+    decoder: LinearReadout = None,
+    decoder_layer=None,
+    recon_alpha=None,
 ):
+    self_supervised = recon_alpha != 0.0
     train_loss = 0
     total_clf_loss = 0
     total_regularizaton_loss = 0
@@ -78,7 +84,6 @@ def train_fptt(
         B = target.size()[0]
 
         for t in range(time_steps):
-
             if t == 0:
                 h, readout = model.init_hidden(data.size(0))
             else:
@@ -97,20 +102,21 @@ def train_fptt(
 
             optimizer.zero_grad()
 
-            # classification loss
-            clf_loss = (t + 1) / k_updates * F.nll_loss(o, target)
-            # clf_loss = snr*F.cross_entropy(output, target,reduction='none')
-            # clf_loss = torch.mean(clf_loss)
-
-            # regularizer loss
-            regularizer = get_regularizer_named_params(named_params, model.device, alpha, rho, _lambda=1.0)
-
+            l_clf = (t + 1) / k_updates * F.nll_loss(o, target)
+            l_reg = get_regularizer_named_params(named_params, model.device, alpha, rho, _lambda=1.0)
             # mem potential loss take l1 norm / num of neurons /batch size
-            energy = model.get_energies() / B
-            spike_loss = model.get_spike_loss(histories=h) / B
+            l_energy = model.get_energies() / B
+            l_spike = model.get_spike_loss(histories=h) / B
 
             # overall loss
-            loss = clf_alpha * clf_loss + regularizer + energy_alpha * energy + spike_alpha * spike_loss
+            loss = clf_alpha * l_clf + l_reg + energy_alpha * l_energy + spike_alpha * l_spike
+
+            if self_supervised:
+                spks = get_states(
+                    [h], decoder_layer + 1, model.d_hidden[decoder_layer], batch_size, time_steps * 5, batch_size
+                )
+                out = decoder(torch.tensor(spks.mean(axis=1)).to(model.device))
+                loss = loss + recon_alpha * F.mse_loss(out, data)
 
             loss.backward()
 
@@ -121,10 +127,10 @@ def train_fptt(
             post_optimizer_updates(named_params, alpha, beta)
 
             train_loss += loss.item()
-            total_clf_loss += clf_loss.item()
-            total_regularizaton_loss += regularizer  # .item()
-            total_energy_loss += energy.item()
-            total_spike_loss += spike_loss.item()
+            total_clf_loss += l_clf.item()
+            total_regularizaton_loss += l_reg  # .item()
+            total_energy_loss += l_energy.item()
+            total_spike_loss += l_spike.item()
 
             model.reset_energies()
 

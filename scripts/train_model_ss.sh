@@ -15,5 +15,5 @@ module load Anaconda3/2024.06-1
 cd $HOME/nddl/
 
 source activate nddl
-srun python main_train_model.py
+srun python main_train_model.py -f configs/train_ss_config.toml
 conda deactivate
