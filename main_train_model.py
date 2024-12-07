@@ -37,9 +37,9 @@ def main():
     epochs = config["training"]["epochs"]
 
     # self_supervised params
+    self_supervised = config["decoder"]["self_supervised"]
     recon_alpha = config["decoder"]["recon_alpha"]
     decoder_layer = config["decoder"]["decoder_layer"]
-    self_supervised = recon_alpha != 0.0
 
     # device
     torch.manual_seed(999)
@@ -113,6 +113,7 @@ def main():
             beta=config["training"]["beta"],
             rho=config["training"]["rho"],
             # self-supervised params
+            self_supervised=self_supervised,
             decoder=decoder,
             decoder_layer=decoder_layer,
             recon_alpha=recon_alpha,

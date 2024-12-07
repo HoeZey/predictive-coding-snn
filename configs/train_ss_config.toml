@@ -24,5 +24,6 @@ beta = 0.5
 rho = 0.0
 
 [decoder]
+self_supervised = true
 recon_alpha = 1.0
 decoder_layer = 1

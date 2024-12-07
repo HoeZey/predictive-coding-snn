@@ -61,6 +61,7 @@ def train_fptt(
     beta,
     rho,
     # decoder
+    self_supervised=False,
     decoder: LinearReadout = None,
     decoder_layer=None,
     recon_alpha=None,
