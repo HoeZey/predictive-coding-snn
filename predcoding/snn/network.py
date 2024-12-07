@@ -51,7 +51,7 @@ class EnergySNN(nn.Module):
 
         self.dropout = nn.Dropout(p_dropout)
         self.input_layer = nn.Linear(d_in, d_hidden[0], bias=bias, device=device)
-        self.output_layer = OutputLayer(d_hidden[-1], d_out, is_fc=True, bias=bias)
+        self.output_layer = OutputLayer(d_hidden[-1], d_out, is_fc=True)
 
         self.hidden_layers: list[SNNLayer] = []
         for d in d_hidden:
@@ -68,12 +68,17 @@ class EnergySNN(nn.Module):
                 )
             )
 
+        self.hidden_layers = nn.ModuleList(self.hidden_layers)
+
         self.forward_connections: list[nn.Linear] = [self.input_layer]
         self.backward_connections: list[nn.Linear] = []
         for d1, d2 in zip(d_hidden, d_hidden[1:]):
             self.forward_connections.append(nn.Linear(d1, d2, bias=bias, device=device))
             self.backward_connections.append(nn.Linear(d2, d1, bias=bias, device=device))
         self.backward_connections.append(nn.Linear(d_out, d_hidden[-1], bias=bias, device=device))
+
+        self.forward_connections = nn.ModuleList(self.forward_connections)
+        self.backward_connections = nn.ModuleList(self.backward_connections)
 
         for ff, fb in zip(self.forward_connections, self.backward_connections):
             nn.init.xavier_uniform_(ff.weight)

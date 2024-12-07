@@ -64,6 +64,7 @@ def get_states(hiddens_all_: list, layer: int, d_hidden: int, batch_size, T=20, 
 
 
 def train_linear_proj(
+    epochs,
     layer,
     model: EnergySNN,
     data_loader,
@@ -79,7 +80,7 @@ def train_linear_proj(
 
     loss_log = []
 
-    for e in tqdm(range(20)):
+    for e in tqdm(range(epochs)):
         for i, (data, target) in enumerate(data_loader):
             data, target = data.to(device), target.to(device)
             data = data.view(-1, model.d_in)
@@ -108,7 +109,7 @@ def train_linear_proj(
 
         if e % 5 == 0:
             plt.imshow(out[target == 0][0].cpu().detach().reshape(28, 28))
-            plt.title("sample1 %i" % target[target == 0][0].item())
+            plt.title(f"sample1 {target[target == 0][0].item()}")
             plt.show()
 
             # find the next image with class 0
