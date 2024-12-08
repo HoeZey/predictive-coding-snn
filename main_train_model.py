@@ -1,5 +1,7 @@
 import json
-import tomllib
+
+# import tomllib
+from pip._vendor import tomli as tomllib
 import argparse
 
 import torch
@@ -133,7 +135,7 @@ def main():
             save_checkpoint(
                 {
                     "epoch": epoch + 1,
-                    "state_dict": model.detach().cpu().state_dict(),
+                    "state_dict": model.to("cup").state_dict(),
                     "best_acc1": best_acc1,
                     "optimizer": optimizer.state_dict(),
                 },
