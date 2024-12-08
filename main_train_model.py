@@ -26,15 +26,15 @@ def main():
     print(json.dumps(config, indent=2))
 
     # network parameters
-    lr = config["network"]["lr"]
     d_hidden = config["network"]["d_hidden"]
     n_classes = config["network"]["n_classes"]
 
     # training parameters
+    epochs = config["training"]["epochs"]
+    lr = config["training"]["lr"]
     T = config["training"]["T"]
     K = config["training"]["K"]  # k_updates is num updates per sequence
     omega = int(T / K)  # update frequency
-    epochs = config["training"]["epochs"]
 
     # self_supervised params
     self_supervised = config["decoder"]["self_supervised"]
@@ -61,7 +61,7 @@ def main():
         d_out=n_classes,
         is_adaptive=config["network"]["use_alif_neurons"],
         one_to_one=config["network"]["one_to_one"],
-        p_dropout=config["network"]["one_to_one"],
+        p_dropout=config["network"]["p_dropout"],
         is_recurrent=config["network"]["is_recurrent"],
         b0=config["network"]["b0"],
         device=device,
@@ -104,9 +104,9 @@ def main():
             k_updates=K,
             omega=omega,
             optimizer=optimizer,
-            clf_alpha=config["network"]["clf_alpha"],
-            energy_alpha=config["network"]["energy_alpha"],
-            spike_alpha=config["network"]["spike_alpha"],
+            clf_alpha=config["training"]["clf_alpha"],
+            energy_alpha=config["training"]["energy_alpha"],
+            spike_alpha=config["training"]["spike_alpha"],
             clip=config["training"]["clip"],
             lr=lr,
             alpha=config["training"]["alpha"],
@@ -138,7 +138,7 @@ def main():
                     "optimizer": optimizer.state_dict(),
                 },
                 prefix="checkpoints/",
-                filename="best_model.pt.tar",
+                filename=f"best_model_{'supervised' if not self_supervised else 'self_supervised'}.pt.tar",
             )
 
         all_test_losses.append(test_loss)
