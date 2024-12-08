@@ -135,13 +135,14 @@ def main():
             save_checkpoint(
                 {
                     "epoch": epoch + 1,
-                    "state_dict": model.to("cup").state_dict(),
+                    "state_dict": model.to("cpu").state_dict(),
                     "best_acc1": best_acc1,
                     "optimizer": optimizer.state_dict(),
                 },
                 prefix="checkpoints/",
                 filename=f"best_model_{'supervised' if not self_supervised else 'self_supervised'}.pt.tar",
             )
+            model.to(device)
 
         all_test_losses.append(test_loss)
 
