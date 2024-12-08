@@ -57,7 +57,6 @@ def train_fptt(
     energy_alpha: float,
     spike_alpha: float,
     clip: float,
-    lr: float,
     alpha: float,
     beta: float,
     rho: float,
@@ -69,6 +68,7 @@ def train_fptt(
 ):
     train_loss = 0
     total_clf_loss = 0
+    total_recon_loss = 0
     total_regularizaton_loss = 0
     total_energy_loss = 0
     total_spike_loss = 0
@@ -77,24 +77,25 @@ def train_fptt(
 
     # for each batch
     for batch_idx, (data, target) in enumerate(train_loader):
-
         # to device and reshape
         data, target = data.to(model.device), target.to(model.device)
         data = data.view(-1, model.d_in)
 
         B = target.size()[0]
 
+        h_hist = []
         for t in range(time_steps):
             if t == 0:
                 h, readout = model.init_hidden(data.size(0))
             elif t % omega:
                 h, readout = [v.detach() for v in h], readout.detach()
 
-            o, h, readout = model.forward(data, h, readout)
+            log_preds, h, readout = model.forward(data, h, readout)
+            h_hist.append(h)
 
             # get prediction
             if t == (time_steps - 1):
-                pred = o.data.max(1, keepdim=True)[1]
+                pred = log_preds.data.max(1, keepdim=True)[1]
                 correct += pred.eq(target.data.view_as(pred)).cpu().sum()
 
             # only update model every omega steps
@@ -103,7 +104,11 @@ def train_fptt(
 
             optimizer.zero_grad()
 
-            l_clf = (t + 1) / k_updates * F.nll_loss(o, target)
+            spks = get_states([h_hist], decoder_layer + 1, model.d_hidden[decoder_layer], batch_size, t, batch_size)
+            out = decoder(torch.tensor(spks.mean(axis=1)).to(model.device))
+
+            l_clf = (t + 1) / k_updates * F.nll_loss(log_preds, target)
+            l_recon = F.mse_loss(out, data)
             l_reg = get_regularizer_named_params(named_params, model.device, alpha, rho, _lambda=1.0)
             # mem potential loss take l1 norm / num of neurons /batch size
             l_energy = model.get_energies() / B
@@ -113,11 +118,7 @@ def train_fptt(
             loss = clf_alpha * l_clf + l_reg + energy_alpha * l_energy + spike_alpha * l_spike
 
             if self_supervised:
-                spks = get_states(
-                    [h], decoder_layer + 1, model.d_hidden[decoder_layer], batch_size, time_steps * 5, batch_size
-                )
-                out = decoder(torch.tensor(spks.mean(axis=1)).to(model.device))
-                loss = loss + recon_alpha * F.mse_loss(out, data)
+                loss = loss + recon_alpha * l_recon
 
             loss.backward()
 
@@ -129,25 +130,25 @@ def train_fptt(
 
             train_loss += loss.item()
             total_clf_loss += l_clf.item()
-            total_regularizaton_loss += l_reg  # .item()
+            total_recon_loss += l_recon.item()
+            total_regularizaton_loss += l_reg
             total_energy_loss += l_energy.item()
             total_spike_loss += l_spike.item()
-
             model.reset_energies()
 
         if batch_idx > 0 and batch_idx % log_interval == (log_interval - 1):
             print(
-                "Train Epoch: {} [{}/{} ({:.0f}%)]\tenerg: {:.6f}\tlr: {:.6f}\ttrain acc:{:.4f}\tLoss: {:.6f}\
-                \tClf: {:.6f}\tReg: {:.6f}\tFr_p: {:.6f}\tFr_r: {:.6f}".format(
+                "Train Epoch: {} [{:5>}/{} ({:.0f}%)] train acc: {:.2f} | L_total: {:.2f} | L_E: {:.2f}"
+                + " | L_clf: {:.2f} | L_rec: {:.2f} | L_reg: {:.2f} | f_p: {:.2f} | f_r: {:.2f}".format(
                     epoch,
                     batch_idx * batch_size,
                     len(train_loader.dataset),
-                    100.0 * batch_idx / len(train_loader),
-                    total_energy_loss / log_interval,
-                    lr,
+                    100 * batch_idx / len(train_loader),
                     100 * correct / (log_interval * B),
                     train_loss / log_interval,
+                    total_energy_loss / log_interval,
                     total_clf_loss / log_interval,
+                    total_recon_loss / log_interval,
                     total_regularizaton_loss / log_interval,
                     model.firing_rates[0] / time_steps / log_interval,
                     model.firing_rates[1] / time_steps / log_interval,
@@ -156,6 +157,7 @@ def train_fptt(
 
             train_loss = 0
             total_clf_loss = 0
+            total_recon_loss = 0
             total_regularizaton_loss = 0
             total_energy_loss = 0
             total_spike_loss = 0

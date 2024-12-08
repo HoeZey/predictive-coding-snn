@@ -28,6 +28,7 @@ def main():
     print(json.dumps(config, indent=2))
 
     # network parameters
+    d_in = config["network"]["d_in"]
     d_hidden = config["network"]["d_hidden"]
     n_classes = config["network"]["n_classes"]
 
@@ -58,7 +59,7 @@ def main():
 
     # define network
     model = EnergySNN(
-        config["network"]["d_in"],
+        d_in,
         d_hidden,
         d_out=n_classes,
         is_adaptive=config["network"]["use_alif_neurons"],
@@ -74,7 +75,7 @@ def main():
     print(f"Total param count {total_params}")
 
     if self_supervised:
-        decoder = LinearReadout(d_in=d_hidden[decoder_layer], d_out=n_classes).to(device)
+        decoder = LinearReadout(d_in=d_hidden[decoder_layer], d_out=d_in).to(device)
         decoder.train()
     else:
         decoder = None
@@ -110,7 +111,6 @@ def main():
             energy_alpha=config["training"]["energy_alpha"],
             spike_alpha=config["training"]["spike_alpha"],
             clip=config["training"]["clip"],
-            lr=lr,
             alpha=config["training"]["alpha"],
             beta=config["training"]["beta"],
             rho=config["training"]["rho"],
