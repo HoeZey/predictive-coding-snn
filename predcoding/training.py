@@ -104,7 +104,7 @@ def train_fptt(
 
             optimizer.zero_grad()
 
-            spks = get_states([h_hist], decoder_layer + 1, model.d_hidden[decoder_layer], batch_size, t, batch_size)
+            spks = get_states([h_hist], decoder_layer + 1, model.d_hidden[decoder_layer], B, t, B)
             out = decoder(torch.tensor(spks.mean(axis=1)).to(model.device))
 
             l_clf = (t + 1) / k_updates * F.nll_loss(log_preds, target)
