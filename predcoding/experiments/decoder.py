@@ -44,23 +44,15 @@ def get_states(hiddens_all_: list, layer: int, d_hidden: int, batch_size, T=20, 
         np.array containing desired states
     """
 
-    all_states = []
+    all_states = torch.zeros((num_samples, T, d_hidden))
 
     for batch_idx in range(len(hiddens_all_)):  # iterate over batch
-        batch_ = []
         for t in range(T):
-            seq_ = []
-            for b in range(batch_size):
-                seq_.append(hiddens_all_[batch_idx][t][layer].spikes[b].detach().cpu().numpy())
-            seq_ = np.stack(seq_)
-            batch_.append(seq_)
-        batch_ = np.stack(batch_)
+            spikes_t = hiddens_all_[batch_idx][t][layer].spikes
+            print("SPIKE", spikes_t.shape)
+            all_states[:, t] = spikes_t
 
-        all_states.append(batch_)
-
-    all_states = np.stack(all_states)
-
-    return all_states.transpose(0, 2, 1, 3).reshape(num_samples, T, d_hidden)
+    return all_states
 
 
 def train_linear_proj(
