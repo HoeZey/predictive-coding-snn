@@ -80,6 +80,7 @@ def main():
         params += list(decoder.parameters())
 
     optimizer = optim.Adamax(params, lr=lr, weight_decay=0.0001)
+    decoder_optimizer = optim.Adam(decoder.parameters(), lr=0.001, weight_decay=0.0001)
     # reduce the learning after 20 epochs by a factor of 10
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=2, gamma=0.5)
 
@@ -114,6 +115,7 @@ def main():
             decoder=decoder,
             decoder_layer=decoder_layer,
             recon_alpha=recon_alpha,
+            decoder_optimizer=decoder_optimizer,
         )
 
         reset_named_params(named_params)
