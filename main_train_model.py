@@ -69,7 +69,7 @@ def main():
         device=device,
     ).to(device)
 
-    decoder = LinearReadout(d_in=d_hidden[decoder_layer], d_out=d_in).to(device)
+    decoder = LinearReadout(d_in=d_hidden[decoder_layer], d_out=d_in, device=device).to(device)
 
     model_params = count_parameters(model)
     decoder_params = count_parameters(decoder)

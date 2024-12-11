@@ -9,13 +9,14 @@ from predcoding.snn.network import EnergySNN
 
 # linear decoder, but change the following class to other decoder types if necessary
 class LinearReadout(nn.Module):
-    def __init__(self, d_in, d_out, d_hidden=None):
+    def __init__(self, d_in, d_out, device, d_hidden=None):
         super(LinearReadout, self).__init__()
         self.d_in = d_in
         self.d_out = d_out
         self.d_hidden = d_hidden
+        self.device = device
 
-        self.fc1 = nn.Linear(d_in, d_out)
+        self.fc1 = nn.Linear(d_in, d_out, device=device)
         # self.fc2 = nn.Linear(hidden_dim, hidden_dim)
         # self.fc3 = nn.Linear(hidden_dim, out_dim)
 
