@@ -26,6 +26,7 @@ class LinearReadout(nn.Module):
         # nn.init.xavier_uniform_(self.fc3.weight)
 
     def forward(self, x):
+        print("INPUT", x.device)
         # x = torch.relu(self.fc1(x))
         # x = torch.relu(self.fc2(x))
         x = self.fc1(x)
