@@ -61,6 +61,7 @@ def train_fptt(
     beta: float,
     rho: float,
     # decoder
+    supervised=True,
     self_supervised=False,
     decoder: LinearReadout = None,
     decoder_layer: int = None,
@@ -104,16 +105,26 @@ def train_fptt(
             if not (t % omega == 0 and t > 0):
                 continue
 
+            # compute reconstruction
+            spks = get_states([h_hist], decoder_layer + 1, model.d_hidden[decoder_layer], B, t, B)
+            out = decoder(torch.tensor(spks.mean(axis=1)).to(model.device))
+
             optimizer.zero_grad()
+            decoder_optimizer.zero_grad()
 
             l_clf = (t + 1) / k_updates * F.nll_loss(log_preds, target)
+            l_recon = recon_alpha * F.mse_loss(out, data)
             l_reg = get_regularizer_named_params(named_params, model.device, alpha, rho, _lambda=1.0)
-            # mem potential loss take l1 norm / num of neurons /batch size
             l_energy = model.get_energies() / B
             l_spike = model.get_spike_loss(histories=h) / B
 
             # overall loss
-            loss = clf_alpha * l_clf + l_reg + energy_alpha * l_energy + spike_alpha * l_spike
+            loss = l_reg + energy_alpha * l_energy + spike_alpha * l_spike
+
+            if supervised:
+                loss = loss + clf_alpha * l_clf
+            if self_supervised:
+                loss = loss + recon_alpha * l_recon
 
             loss.backward()
 
@@ -121,6 +132,8 @@ def train_fptt(
                 torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
 
             optimizer.step()
+            decoder_optimizer.step()
+
             post_optimizer_updates(named_params, alpha, beta)
 
             train_loss += loss.item()
@@ -129,13 +142,6 @@ def train_fptt(
             total_energy_loss += l_energy.item()
             total_spike_loss += l_spike.item()
             model.reset_energies()
-
-        decoder_optimizer.zero_grad()
-        spks = get_states([h_hist], decoder_layer + 1, model.d_hidden[decoder_layer], B, t, B)
-        out = decoder(torch.tensor(spks.mean(axis=1)).to(model.device))
-        l_recon = recon_alpha * F.mse_loss(out, data)
-        l_recon.backward()
-        decoder_optimizer.step()
 
         total_recon_loss += l_recon.item()
 

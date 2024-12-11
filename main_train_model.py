@@ -31,6 +31,7 @@ def main():
     n_classes = config["network"]["n_classes"]
 
     # training parameters
+    supervised = config["training"]["supervised"]
     epochs = config["training"]["epochs"]
     lr = config["training"]["lr"]
     T = config["training"]["T"]
@@ -75,12 +76,9 @@ def main():
     decoder = LinearReadout(d_in=d_hidden[decoder_layer], d_out=d_in).to(device)
 
     # define optimiser
-    decoder_params = list(decoder.parameters())
-    if self_supervised:
-        decoder_params += list(model.parameters())
-
     optimizer = optim.Adamax(model.parameters(), lr=lr, weight_decay=0.0001)
-    decoder_optimizer = optim.Adam(decoder_params, lr=0.001, weight_decay=0.0001)
+    decoder_optimizer = optim.Adam(decoder.parameters(), lr=0.001, weight_decay=0.0001)
+
     # reduce the learning after 20 epochs by a factor of 10
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=2, gamma=0.5)
 
@@ -111,6 +109,7 @@ def main():
             beta=config["training"]["beta"],
             rho=config["training"]["rho"],
             # self-supervised params
+            supervised=supervised,
             self_supervised=self_supervised,
             decoder=decoder,
             decoder_layer=decoder_layer,
@@ -130,15 +129,16 @@ def main():
 
         if is_best:
             save_checkpoint(
-                {
-                    "epoch": epoch + 1,
-                    "state_dict": model.to("cpu").state_dict(),
-                    "best_acc1": best_acc1,
-                    "optimizer": optimizer.state_dict(),
-                },
+                {"state_dict": model.to("cpu").state_dict()},
                 prefix="checkpoints/",
                 filename=f"best_model_{config['checkpoint']['file_name']}.pt.tar",
             )
+            save_checkpoint(
+                {"state_dict": decoder.to("cpu").state_dict()},
+                prefix="checkpoints/",
+                filename=f"decoder_{config['checkpoint']['file_name']}.pt.tar",
+            )
+
             model.to(device)
 
         all_test_losses.append(test_loss)

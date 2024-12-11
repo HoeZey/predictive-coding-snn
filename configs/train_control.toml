@@ -9,6 +9,7 @@ d_hidden = [600, 500, 500]
 n_classes = 10
 
 [training]
+supervised = true
 lr = 0.001
 clf_alpha = 1.0
 energy_alpha = 0.0
