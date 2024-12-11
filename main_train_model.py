@@ -1,5 +1,5 @@
 import json
-import tomllib
+from pip._vendor import tomli as tomllib
 import argparse
 
 import torch
