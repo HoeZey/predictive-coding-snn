@@ -138,14 +138,13 @@ def train_fptt(
 
             train_loss += loss.item()
             total_clf_loss += l_clf.item()
+            total_recon_loss += l_recon.item()
             total_regularizaton_loss += l_reg
             total_energy_loss += l_energy.item()
             total_spike_loss += l_spike.item()
             model.reset_energies()
 
-        total_recon_loss += l_recon.item()
-
-        if i_batch > 0 and i_batch % log_interval == (log_interval - 1):
+        if (i_batch + 1) % log_interval == 0:
             print(
                 (
                     "Train Epoch: {} [{}/{} ({:.0f}%)] train acc: {:.2f} | L_total: {:.2f} | L_E: {:.2f}"

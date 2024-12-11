@@ -29,5 +29,5 @@ file_name = "control"
 
 [decoder]
 self_supervised = false
-recon_alpha = 1.0
+recon_alpha = 5.0
 decoder_layer = 1

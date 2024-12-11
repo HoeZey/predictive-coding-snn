@@ -29,5 +29,5 @@ file_name = "mix"
 
 [decoder]
 self_supervised = true
-recon_alpha = 1.0
+recon_alpha = 5.0
 decoder_layer = 1
