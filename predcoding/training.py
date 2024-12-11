@@ -106,8 +106,8 @@ def train_fptt(
                 continue
 
             # compute reconstruction
-            spikes = get_states([h_hist], decoder_layer + 1, model.d_hidden[decoder_layer], B, t, B)
-            out = decoder(spikes.mean(dim=1).to(model.device))
+            spikes = get_states([h_hist], decoder_layer + 1, model.d_hidden[decoder_layer], B, t, B).to(model.device)
+            out = decoder(spikes.mean(dim=1))
 
             optimizer.zero_grad()
             decoder_optimizer.zero_grad()
