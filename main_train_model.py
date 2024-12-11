@@ -46,6 +46,7 @@ def main():
     # device
     torch.manual_seed(999)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    torch.set_default_device(device)
     print(f"Using device: {device}")
 
     # data loaders
@@ -69,15 +70,15 @@ def main():
         device=device,
     ).to(device)
 
-    # define new loss and optimiser
-    total_params = count_parameters(model)
-    print(f"Total param count {total_params}")
-
     decoder = LinearReadout(d_in=d_hidden[decoder_layer], d_out=d_in).to(device)
+
+    model_params = count_parameters(model)
+    decoder_params = count_parameters(decoder)
+    print(f"Model params: {model_params} | Decoder params: {decoder_params} | Tota: {model_params + decoder_params}")
 
     # define optimiser
     optimizer = optim.Adamax(model.parameters(), lr=lr, weight_decay=0.0001)
-    decoder_optimizer = optim.Adam(decoder.parameters(), lr=0.001, weight_decay=0.0001)
+    decoder_optimizer = optim.Adam(decoder.parameters(), lr=lr, weight_decay=0.0001)
 
     # reduce the learning after 20 epochs by a factor of 10
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=2, gamma=0.5)

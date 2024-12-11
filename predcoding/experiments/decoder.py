@@ -46,7 +46,7 @@ def get_states(hiddens_all_: list, layer: int, d_hidden: int, batch_size, T=20, 
 
     all_states = torch.zeros((num_samples, T, d_hidden))
 
-    for batch_idx in range(len(hiddens_all_)):  # iterate over batch
+    for batch_idx in range(len(hiddens_all_)):
         for t in range(T):
             spikes_t = hiddens_all_[batch_idx][t][layer].spikes
             all_states[:, t] = spikes_t
