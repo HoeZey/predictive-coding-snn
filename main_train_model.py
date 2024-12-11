@@ -1,7 +1,5 @@
 import json
-
-# import tomllib
-from pip._vendor import tomli as tomllib
+import tomllib
 import argparse
 
 import torch
@@ -74,11 +72,7 @@ def main():
     total_params = count_parameters(model)
     print(f"Total param count {total_params}")
 
-    if self_supervised:
-        decoder = LinearReadout(d_in=d_hidden[decoder_layer], d_out=d_in).to(device)
-        decoder.train()
-    else:
-        decoder = None
+    decoder = LinearReadout(d_in=d_hidden[decoder_layer], d_out=d_in).to(device)
 
     # define optimiser
     params = list(model.parameters())
@@ -94,6 +88,7 @@ def main():
     best_acc1 = 0
 
     model.train()
+    decoder.train()
 
     for epoch in tqdm(range(epochs), total=epochs):
         train_fptt(

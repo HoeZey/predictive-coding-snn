@@ -138,7 +138,7 @@ def train_fptt(
 
         if batch_idx > 0 and batch_idx % log_interval == (log_interval - 1):
             print(
-                "Train Epoch: {} [{:5>}/{} ({:.0f}%)] train acc: {:.2f} | L_total: {:.2f} | L_E: {:.2f}"
+                "Train Epoch: {} [{}/{} ({:.0f}%)] train acc: {:.2f} | L_total: {:.2f} | L_E: {:.2f}"
                 + " | L_clf: {:.2f} | L_rec: {:.2f} | L_reg: {:.2f} | f_p: {:.2f} | f_r: {:.2f}".format(
                     epoch,
                     batch_idx * batch_size,
