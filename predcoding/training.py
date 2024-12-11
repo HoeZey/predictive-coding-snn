@@ -129,13 +129,11 @@ def train_fptt(
             total_spike_loss += l_spike.item()
             model.reset_energies()
 
-        optimizer.zero_grad()
         decoder_optimizer.zero_grad()
         spks = get_states([h_hist], decoder_layer + 1, model.d_hidden[decoder_layer], B, t, B)
         out = decoder(torch.tensor(spks.mean(axis=1)).to(model.device))
         l_recon = recon_alpha * F.mse_loss(out, data)
         l_recon.backward()
-        optimizer.step()
         decoder_optimizer.step()
 
         total_recon_loss += l_recon.item()

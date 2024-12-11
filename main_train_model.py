@@ -75,12 +75,12 @@ def main():
     decoder = LinearReadout(d_in=d_hidden[decoder_layer], d_out=d_in).to(device)
 
     # define optimiser
-    params = list(model.parameters())
+    decoder_params = list(decoder.parameters())
     if self_supervised:
-        params += list(decoder.parameters())
+        decoder_params += list(model.parameters())
 
-    optimizer = optim.Adamax(params, lr=lr, weight_decay=0.0001)
-    decoder_optimizer = optim.Adam(decoder.parameters(), lr=0.001, weight_decay=0.0001)
+    optimizer = optim.Adamax(model.parameters(), lr=lr, weight_decay=0.0001)
+    decoder_optimizer = optim.Adam(decoder_params, lr=0.001, weight_decay=0.0001)
     # reduce the learning after 20 epochs by a factor of 10
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=2, gamma=0.5)
 
