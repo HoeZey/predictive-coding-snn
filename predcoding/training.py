@@ -76,7 +76,7 @@ def train_fptt(
     model.train()
 
     # for each batch
-    for batch_idx, (data, target) in enumerate(train_loader):
+    for i_batch, (data, target) in enumerate(train_loader):
         # to device and reshape
         data, target = data.to(model.device), target.to(model.device)
         data = data.view(-1, model.d_in)
@@ -136,14 +136,16 @@ def train_fptt(
             total_spike_loss += l_spike.item()
             model.reset_energies()
 
-        if batch_idx > 0 and batch_idx % log_interval == (log_interval - 1):
+        if i_batch > 0 and i_batch % log_interval == (log_interval - 1):
             print(
-                "Train Epoch: {} [{}/{} ({:.0f}%)] train acc: {:.2f} | L_total: {:.2f} | L_E: {:.2f}"
-                + " | L_clf: {:.2f} | L_rec: {:.2f} | L_reg: {:.2f} | f_p: {:.2f} | f_r: {:.2f}".format(
+                (
+                    "Train Epoch: {} [{}/{} ({:.0f}%)] train acc: {:.2f} | L_total: {:.2f} | L_E: {:.2f}"
+                    + " | L_clf: {:.2f} | L_rec: {:.2f} | L_reg: {:.2f} | f_p: {:.2f} | f_r: {:.2f}"
+                ).format(
                     epoch,
-                    batch_idx * batch_size,
+                    i_batch * batch_size,
                     len(train_loader.dataset),
-                    100 * batch_idx / len(train_loader),
+                    100 * i_batch / len(train_loader),
                     100 * correct / (log_interval * B),
                     train_loss / log_interval,
                     total_energy_loss / log_interval,
