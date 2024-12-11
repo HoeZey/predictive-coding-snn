@@ -137,7 +137,7 @@ def main():
                     "optimizer": optimizer.state_dict(),
                 },
                 prefix="checkpoints/",
-                filename=f"best_model_{'supervised' if not self_supervised else 'self_supervised'}.pt.tar",
+                filename=f"best_model_{config['checkpoint']['file_name']}.pt.tar",
             )
             model.to(device)
 

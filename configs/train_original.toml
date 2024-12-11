@@ -23,6 +23,9 @@ alpha = 0.2
 beta = 0.5
 rho = 0.0
 
+[checkpoint]
+file_name = "energy"
+
 [decoder]
 self_supervised = false
 recon_alpha = 1.0
