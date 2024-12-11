@@ -140,6 +140,7 @@ def main():
             )
 
             model.to(device)
+            decoder.to(device)
 
         all_test_losses.append(test_loss)
 

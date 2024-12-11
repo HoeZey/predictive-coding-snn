@@ -107,10 +107,6 @@ def train_fptt(
 
             # compute reconstruction
             spikes = get_states([h_hist], decoder_layer + 1, model.d_hidden[decoder_layer], B, t, B).to(decoder.device)
-            if not all("cuda" == str(d)[:4] for d in [spikes.device, model.device, decoder.device]):
-                print("SPIKES", spikes.device)
-                print("MODEL", model.device)
-                print("DECODER", decoder.device)
             out = decoder(spikes.mean(dim=1))
 
             optimizer.zero_grad()
