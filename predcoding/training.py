@@ -76,6 +76,7 @@ def train_fptt(
     correct = 0
     model.train()
 
+    print()
     # for each batch
     for i_batch, (data, target) in enumerate(train_loader):
         # to device and reshape
