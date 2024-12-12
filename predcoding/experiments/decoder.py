@@ -68,7 +68,7 @@ def train_linear_proj(
     fn_loss=nn.MSELoss(),
 ):
     mlp = LinearReadout(d_hidden, d_in, model.d_hidden[layer]).to(device)
-    optimiser = optim.Adam(mlp.parameters(), lr=0.001, weight_decay=0.0001)
+    optimizer = optim.Adam(mlp.parameters(), lr=0.001, weight_decay=0.0001)
 
     loss_log = []
 
@@ -88,14 +88,14 @@ def train_linear_proj(
             train_data = torch.tensor(spks.mean(axis=1)).to(device)
             # print(train_data.size())
 
-            optimiser.zero_grad()
+            optimizer.zero_grad()
 
             out = mlp(train_data)
             loss = fn_loss(out, data)
             loss_log.append(loss.data.cpu())
 
             loss.backward()
-            optimiser.step()
+            optimizer.step()
 
         print("%i train loss: %.4f" % (e, loss))
 

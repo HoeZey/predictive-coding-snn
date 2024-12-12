@@ -79,19 +79,19 @@ def train_fptt(
 
     print()
     # for each batch
-    for i_batch, (data, target) in enumerate(train_loader):
+    for i_batch, (data, labels) in enumerate(train_loader):
         # to device and reshape
-        data, target = data.to(model.device), target.to(model.device)
+        data, labels = data.to(model.device), labels.to(model.device)
         data = data.view(-1, model.d_in)
 
-        B = target.size()[0]
+        B = labels.size()[0]
 
         h_hist = []
         for t in range(time_steps):
             if t == 0:
                 h, readout = model.init_hidden(data.size(0))
             elif t % omega:
-                h, readout = [v.detach() for v in h], readout.detach()
+                h, readout = [value.detach() for value in h], readout.detach()
 
             log_preds, h, readout = model.forward(data, h, readout)
             h_hist.append(h)
@@ -99,7 +99,7 @@ def train_fptt(
             # get prediction
             if t == (time_steps - 1):
                 pred = log_preds.data.max(1, keepdim=True)[1]
-                correct += pred.eq(target.data.view_as(pred)).cpu().sum()
+                correct += pred.eq(labels.data.view_as(pred)).cpu().sum()
 
             # only update model every omega steps
             if not (t % omega == 0 and t > 0):
@@ -107,32 +107,33 @@ def train_fptt(
 
             # compute reconstruction
             spikes = get_states([h_hist], decoder_layer + 1, model.d_hidden[decoder_layer], B, t, B).to(decoder.device)
-            out = decoder(spikes.mean(dim=1))
+            reconstruction = decoder(spikes.mean(dim=1))
 
-            optimizer.zero_grad()
-            decoder_optimizer.zero_grad()
-
-            l_clf = (t + 1) / k_updates * F.nll_loss(log_preds, target)
-            l_recon = recon_alpha * F.mse_loss(out, data)
+            # loss calculations
+            l_clf = (t + 1) / k_updates * F.nll_loss(log_preds, labels)
+            l_recon = recon_alpha * F.mse_loss(reconstruction, data)
             l_reg = get_regularizer_named_params(named_params, model.device, alpha, rho, _lambda=1.0)
             l_energy = model.get_energies() / B
             l_spike = model.get_spike_loss(histories=h) / B
 
-            # overall loss
             loss = l_reg + energy_alpha * l_energy + spike_alpha * l_spike
 
             if supervised:
                 loss = loss + clf_alpha * l_clf
             if self_supervised:
                 loss = loss + recon_alpha * l_recon
+            
+            # decoder update
+            decoder_optimizer.zero_grad()
+            (recon_alpha * l_recon).backward(retain_graph=True)
+            decoder_optimizer.step()
 
+            # model update
+            optimizer.zero_grad()
             loss.backward()
-
             if clip > 0:
                 torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
-
             optimizer.step()
-            decoder_optimizer.step()
 
             post_optimizer_updates(named_params, alpha, beta)
 

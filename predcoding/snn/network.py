@@ -115,7 +115,7 @@ class EnergySNN(nn.Module):
                 b_t=h.b,
             )
 
-            h1 = LayerHistory(soma=soma.detach(), spikes=spikes.detach(), dendrites=dendrites.detach(), b=b.detach())
+            h1 = LayerHistory(soma=soma, spikes=spikes, dendrites=dendrites, b=b)
             new_histories.append(h1)
             self.energies[i] = dendrites - soma
             self.firing_rates[i] += spikes.detach().mean().item()
