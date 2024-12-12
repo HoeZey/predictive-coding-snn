@@ -22,7 +22,7 @@ class LayerHidden:
         )
 
     def detach(self):
-        return LayerHidden(self.soma, self.spikes, self.dendrites, self.b)
+        return LayerHidden(self.soma.detach(), self.spikes.detach(), self.dendrites.detach(), self.b.detach())
 
 
 class EnergySNN(nn.Module):

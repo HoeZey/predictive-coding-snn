@@ -5,7 +5,7 @@
 #SBATCH --job-name=TRAIN_ORIGINAL
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
-#SBATCH --time=0:10:00
+#SBATCH --time=3:30:00
 #SBATCH --output=outputs/train_model/original/output_%A.out
 
 module purge

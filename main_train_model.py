@@ -74,7 +74,7 @@ def main():
     model_param_count = count_parameters(model)
     decoder_param_count = count_parameters(decoder)
     print(
-        f"Model params: {model_param_count} | Decoder params: {decoder_param_count} | Tota: {model_param_count + decoder_param_count}"
+        f"Model params: {model_param_count} | Decoder params: {decoder_param_count} | Total: {model_param_count + decoder_param_count}"
     )
 
     # define optimiser
