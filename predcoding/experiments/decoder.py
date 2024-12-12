@@ -49,7 +49,7 @@ def get_states(hiddens_all_: list, layer: int, d_hidden: int, batch_size, T=20, 
 
     for batch_idx in range(len(hiddens_all_)):
         for t in range(T):
-            spikes_t = hiddens_all_[batch_idx][t][layer].spikes
+            spikes_t = hiddens_all_[batch_idx][t][layer].spikes.detach()
             all_states[:, t] = spikes_t
 
     return all_states

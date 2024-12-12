@@ -71,9 +71,11 @@ def main():
 
     decoder = LinearReadout(d_in=d_hidden[decoder_layer], d_out=d_in, device=device).to(device)
 
-    model_params = count_parameters(model)
-    decoder_params = count_parameters(decoder)
-    print(f"Model params: {model_params} | Decoder params: {decoder_params} | Tota: {model_params + decoder_params}")
+    model_param_count = count_parameters(model)
+    decoder_param_count = count_parameters(decoder)
+    print(
+        f"Model params: {model_param_count} | Decoder params: {decoder_param_count} | Tota: {model_param_count + decoder_param_count}"
+    )
 
     # define optimiser
     optimizer = optim.Adamax(model.parameters(), lr=lr, weight_decay=0.0001)
@@ -82,7 +84,8 @@ def main():
     # reduce the learning after 20 epochs by a factor of 10
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=2, gamma=0.5)
 
-    named_params = get_stats_named_params(model)
+    model_params = get_stats_named_params(model)
+    decoder_params = get_stats_named_params(decoder)
     all_test_losses = []
     best_acc1 = 0
 
@@ -96,7 +99,7 @@ def main():
             log_interval=config["training"]["log_interval"],
             train_loader=train_loader,
             model=model,
-            named_params=named_params,
+            named_params=model_params,
             time_steps=T,
             k_updates=K,
             omega=omega,
@@ -117,7 +120,8 @@ def main():
             decoder_optimizer=decoder_optimizer,
         )
 
-        reset_named_params(named_params)
+        reset_named_params(model_params)
+        reset_named_params(decoder_params)
 
         test_loss, acc1 = test(model, test_loader, T)
 
