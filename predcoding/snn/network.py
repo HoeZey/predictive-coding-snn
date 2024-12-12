@@ -91,8 +91,7 @@ class EnergySNN(nn.Module):
         self, x_t, histories: list[LayerHistory], readout: torch.FloatTensor
     ) -> tuple[torch.FloatTensor, list[LayerHistory], torch.FloatTensor]:
         batch_dim, input_size = x_t.shape
-        x_t = self.dropout(x_t.reshape(batch_dim, input_size).float() * 0.5)
-        spikes = x_t
+        spikes = self.dropout(x_t.reshape(batch_dim, input_size).float() * 0.5)
 
         new_histories = []
 
@@ -116,7 +115,7 @@ class EnergySNN(nn.Module):
                 b_t=h.b,
             )
 
-            h1 = LayerHistory(soma=soma, spikes=spikes, dendrites=dendrites, b=b)
+            h1 = LayerHistory(soma=soma.detach(), spikes=spikes.detach(), dendrites=dendrites.detach(), b=b.detach())
             new_histories.append(h1)
             self.energies[i] = dendrites - soma
             self.firing_rates[i] += spikes.detach().mean().item()
