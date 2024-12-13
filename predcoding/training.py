@@ -48,7 +48,7 @@ def train_fptt(
     log_interval: int,
     train_loader: DataLoader,
     model: EnergySNN,
-    named_params,
+    named_params: dict,
     time_steps: int,
     k_updates: int,
     omega: int,
@@ -178,4 +178,108 @@ def train_fptt(
             total_energy_loss = 0
             total_spike_loss = 0
             correct = 0
+            model.reset_firing_rates()
+
+
+def train_fptt_bottleneck(
+    # models
+    model: EnergySNN,
+    decoder: LinearDecoder,
+    layer_to_decode: int,
+    # training
+    T: int,  # number of timesteps
+    K: int,  # number of updates
+    update_interval: int,
+    data_loader: DataLoader,
+    model_params: dict,
+    decoder_params: dict,
+    # optimization
+    optimizer: torch.optim.Optimizer,
+    alpha_energy: float,
+    alpha_recon: float,
+    clip_value: float,
+    # fptt regularizer parameters
+    alpha: float,
+    beta: float,
+    rho: float,
+    # other
+    epoch: int,
+    log_interval: int,
+    debug=False,
+):
+    if debug:
+        torch.autograd.set_detect_anomaly(True)
+
+    train_loss = 0
+    total_recon_loss = 0
+    total_energy_loss = 0
+    total_regularizaton_loss = 0
+
+    # for each batch
+    for i_batch, (data, labels) in enumerate(data_loader):
+        # to device and reshape
+        data, labels = data.to(model.device), labels.to(model.device)
+        data = data.view(-1, model.d_in)
+        B = labels.size()[0]
+        h_hist = torch.zeros((B, T, model.d_hidden[layer_to_decode]), device=model.device)
+
+        for t in range(T):
+            if t == 0:
+                h, readout = model.init_hidden(data.size(0))
+            elif t % update_interval:
+                h, readout = [value.detach() for value in h], readout.detach()
+
+            _, h, readout = model.forward(data, h, readout)
+
+            # add spike to spike history
+            h_hist[:, t] = h[layer_to_decode].spikes.detach()
+
+            # only update model every omega steps
+            if not (t % update_interval == 0 and t > 0):
+                continue
+
+            # loss calculations
+            reconstruction = decoder(h_hist[:, : t + 1].mean(dim=1))
+            l_recon = (t + 1) / K * F.mse_loss(reconstruction, data)
+            l_energy = model.get_energies() / B
+            l_reg = get_regularizer_named_params(model_params, model.device, alpha, rho, _lambda=1.0)
+            loss = alpha_recon * l_recon + alpha_energy * l_energy + l_reg
+
+            # decoder update
+            optimizer.zero_grad()
+            loss.backward()
+            if clip_value > 0:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), clip_value)
+            optimizer.step()
+            post_optimizer_updates(model_params, alpha, beta)
+            post_optimizer_updates(decoder_params, alpha, beta)
+
+            train_loss += loss.item()
+            total_recon_loss += (l_recon).item() / alpha_recon
+            total_energy_loss += l_energy.item()
+            total_regularizaton_loss += l_reg
+            model.reset_energies()
+
+        if (i_batch + 1) % log_interval == 0:
+            print(
+                (
+                    "Train Epoch: {} batch {} | L_total: {:.2f} | L_E: {:.2f}"
+                    + " | L_clf: {:.2f} | L_rec: {:.2f} | L_reg: {:.2f} | fr: {:.2f}"
+                ).format(
+                    epoch,
+                    i_batch + 1,
+                    train_loss / log_interval,
+                    total_energy_loss / log_interval,
+                    total_clf_loss / log_interval,
+                    total_recon_loss / log_interval,
+                    total_regularizaton_loss / log_interval,
+                    model.firing_rates / T / log_interval,
+                )
+            )
+
+            train_loss = 0
+            total_clf_loss = 0
+            total_recon_loss = 0
+            total_regularizaton_loss = 0
+            total_energy_loss = 0
             model.reset_firing_rates()
