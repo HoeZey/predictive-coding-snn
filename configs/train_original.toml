@@ -31,3 +31,6 @@ file_name = "energy"
 self_supervised = false
 recon_alpha = 5.0
 decoder_layer = 1
+
+[reconstruction]
+decoder_layers = [0, 1, 2]

@@ -30,4 +30,7 @@ file_name = "self-supervised"
 [decoder]
 self_supervised = true
 recon_alpha = 5.0
-decoder_layer = 1
+decoder_layer = 2
+
+[reconstruction]
+decoder_layers = [0, 1, 2]

@@ -9,9 +9,9 @@ d_hidden = [600, 500, 500]
 n_classes = 10
 
 [training]
-supervised = true
+supervised = false
 lr = 0.001
-clf_alpha = 1.0
+clf_alpha = 0.0
 energy_alpha = 0.05  
 spike_alpha = 0.0 
 n_batch = 256
@@ -25,12 +25,12 @@ beta = 0.5
 rho = 0.0
 
 [checkpoint]
-file_name = "mix"
+file_name = "self-supervised_last_layer"
 
 [decoder]
 self_supervised = true
 recon_alpha = 5.0
-decoder_layer = 1
+decoder_layer = 2
 
 [reconstruction]
 decoder_layers = [0, 1, 2]
