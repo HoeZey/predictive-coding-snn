@@ -6,7 +6,7 @@ from predcoding.snn.layer import OutputLayer, SNNLayer
 
 
 @dataclass
-class LayerHistory:
+class LayerHidden:
     soma: torch.FloatTensor | float
     spikes: torch.FloatTensor | float
     dendrites: torch.FloatTensor | float
@@ -22,7 +22,7 @@ class LayerHistory:
         )
 
     def detach(self):
-        return LayerHistory(self.soma.detach(), self.spikes.detach(), self.dendrites.detach(), self.b.detach())
+        return LayerHidden(self.soma.detach(), self.spikes.detach(), self.dendrites.detach(), self.b.detach())
 
 
 class EnergySNN(nn.Module):
@@ -88,11 +88,10 @@ class EnergySNN(nn.Module):
                 nn.init.constant_(fb.bias, 0)
 
     def forward(
-        self, x_t, histories: list[LayerHistory], readout: torch.FloatTensor
-    ) -> tuple[torch.FloatTensor, list[LayerHistory], torch.FloatTensor]:
+        self, x_t, histories: list[LayerHidden], readout: torch.FloatTensor
+    ) -> tuple[torch.FloatTensor, list[LayerHidden], torch.FloatTensor]:
         batch_dim, input_size = x_t.shape
-        x_t = self.dropout(x_t.reshape(batch_dim, input_size).float() * 0.5)
-        spikes = x_t
+        spikes = self.dropout(x_t.reshape(batch_dim, input_size).float() * 0.5)
 
         new_histories = []
 
@@ -116,7 +115,7 @@ class EnergySNN(nn.Module):
                 b_t=h.b,
             )
 
-            h1 = LayerHistory(soma=soma, spikes=spikes, dendrites=dendrites, b=b)
+            h1 = LayerHidden(soma=soma, spikes=spikes, dendrites=dendrites, b=b)
             new_histories.append(h1)
             self.energies[i] = dendrites - soma
             self.firing_rates[i] += spikes.detach().mean().item()
@@ -150,9 +149,9 @@ class EnergySNN(nn.Module):
 
         return log_softmax_hist, h_hist
 
-    def init_hidden(self, n_batch, all_zero=False) -> tuple[list[LayerHistory], torch.FloatTensor]:
+    def init_hidden(self, n_batch, all_zero=False) -> tuple[list[LayerHidden], torch.FloatTensor]:
         histories = [
-            LayerHistory.get_layer_history(n_batch, d, self.b0, self.device, all_zero=all_zero) for d in self.d_hidden
+            LayerHidden.get_layer_history(n_batch, d, self.b0, self.device, all_zero=all_zero) for d in self.d_hidden
         ]
         return (histories, torch.zeros(n_batch, self.d_out, device=self.device))
 
@@ -200,7 +199,7 @@ class EnergySNN(nn.Module):
             l_energy = l_energy + (e**2).sum()
         return l_energy / sum(self.d_hidden)
 
-    def get_spike_loss(self, histories: list[LayerHistory]):
+    def get_spike_loss(self, histories: list[LayerHidden]):
         l_spikes = 0
         for h in histories:
             l_spikes = l_spikes + (h.spikes**2).sum()

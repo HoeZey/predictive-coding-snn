@@ -1,5 +1,5 @@
 import json
-import tomllib
+from pip._vendor import tomli as tomllib
 import argparse
 
 import torch
@@ -11,7 +11,7 @@ from tqdm import tqdm
 from predcoding.snn.network import EnergySNN
 from predcoding.training import train_fptt, get_stats_named_params, reset_named_params
 from predcoding.experiments.eval import test
-from predcoding.experiments.decoder import LinearReadout
+from predcoding.experiments.decoder import LinearDecoder
 from predcoding.utils import count_parameters, save_checkpoint
 
 
@@ -31,6 +31,7 @@ def main():
     n_classes = config["network"]["n_classes"]
 
     # training parameters
+    supervised = config["training"]["supervised"]
     epochs = config["training"]["epochs"]
     lr = config["training"]["lr"]
     T = config["training"]["T"]
@@ -68,22 +69,23 @@ def main():
         device=device,
     ).to(device)
 
-    # define new loss and optimiser
-    total_params = count_parameters(model)
-    print(f"Total param count {total_params}")
+    decoder = LinearDecoder(d_in=d_hidden[decoder_layer], d_out=d_in, device=device).to(device)
 
-    decoder = LinearReadout(d_in=d_hidden[decoder_layer], d_out=d_in).to(device)
+    model_param_count = count_parameters(model)
+    decoder_param_count = count_parameters(decoder)
+    print(
+        f"Model params: {model_param_count} | Decoder params: {decoder_param_count} | Total: {model_param_count + decoder_param_count}"
+    )
 
     # define optimiser
-    params = list(model.parameters())
-    if self_supervised:
-        params += list(decoder.parameters())
+    optimizer = optim.Adamax(model.parameters(), lr=lr, weight_decay=0.0001)
+    decoder_optimizer = optim.Adam(decoder.parameters(), lr=lr, weight_decay=0.0001)
 
-    optimizer = optim.Adamax(params, lr=lr, weight_decay=0.0001)
     # reduce the learning after 20 epochs by a factor of 10
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=2, gamma=0.5)
 
-    named_params = get_stats_named_params(model)
+    model_params = get_stats_named_params(model)
+    decoder_params = get_stats_named_params(decoder)
     all_test_losses = []
     best_acc1 = 0
 
@@ -97,7 +99,7 @@ def main():
             log_interval=config["training"]["log_interval"],
             train_loader=train_loader,
             model=model,
-            named_params=named_params,
+            named_params=model_params,
             time_steps=T,
             k_updates=K,
             omega=omega,
@@ -110,13 +112,16 @@ def main():
             beta=config["training"]["beta"],
             rho=config["training"]["rho"],
             # self-supervised params
+            supervised=supervised,
             self_supervised=self_supervised,
             decoder=decoder,
             decoder_layer=decoder_layer,
             recon_alpha=recon_alpha,
+            decoder_optimizer=decoder_optimizer,
         )
 
-        reset_named_params(named_params)
+        reset_named_params(model_params)
+        reset_named_params(decoder_params)
 
         test_loss, acc1 = test(model, test_loader, T)
 
@@ -128,16 +133,18 @@ def main():
 
         if is_best:
             save_checkpoint(
-                {
-                    "epoch": epoch + 1,
-                    "state_dict": model.to("cpu").state_dict(),
-                    "best_acc1": best_acc1,
-                    "optimizer": optimizer.state_dict(),
-                },
-                prefix="checkpoints/",
-                filename=f"best_model_{'supervised' if not self_supervised else 'self_supervised'}.pt.tar",
+                {"state_dict": model.to("cpu").state_dict()},
+                prefix="checkpoints/train/",
+                filename=f"best_model_{config['checkpoint']['file_name']}.pt.tar",
             )
+            save_checkpoint(
+                {"state_dict": decoder.to("cpu").state_dict()},
+                prefix="checkpoints/train/",
+                filename=f"decoder_{config['checkpoint']['file_name']}.pt.tar",
+            )
+
             model.to(device)
+            decoder.to(device)
 
         all_test_losses.append(test_loss)
 

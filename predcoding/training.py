@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 from predcoding.snn.network import EnergySNN
-from predcoding.experiments.decoder import LinearReadout, get_states
+from predcoding.experiments.decoder import LinearDecoder, get_states
 from torch.utils.data import DataLoader
 
 
@@ -61,11 +61,17 @@ def train_fptt(
     beta: float,
     rho: float,
     # decoder
+    supervised=True,
     self_supervised=False,
-    decoder: LinearReadout = None,
+    decoder: LinearDecoder = None,
     decoder_layer: int = None,
     recon_alpha: float = None,
+    decoder_optimizer: torch.optim.Optimizer = None,
 ):
+    assert supervised or self_supervised, "Training should have either supervised or self-supervised objective"
+
+    torch.autograd.set_detect_anomaly(True)
+
     train_loss = 0
     total_clf_loss = 0
     total_recon_loss = 0
@@ -73,70 +79,78 @@ def train_fptt(
     total_energy_loss = 0
     total_spike_loss = 0
     correct = 0
-    model.train()
 
     # for each batch
-    for i_batch, (data, target) in enumerate(train_loader):
+    for i_batch, (data, labels) in enumerate(train_loader):
         # to device and reshape
-        data, target = data.to(model.device), target.to(model.device)
+        data, labels = data.to(model.device), labels.to(model.device)
         data = data.view(-1, model.d_in)
-
-        B = target.size()[0]
-
+        B = labels.size()[0]
         h_hist = []
+
         for t in range(time_steps):
+            is_last_time_step = t == (time_steps - 1)
             if t == 0:
                 h, readout = model.init_hidden(data.size(0))
             elif t % omega:
-                h, readout = [v.detach() for v in h], readout.detach()
+                h, readout = [value.detach() for value in h], readout.detach()
 
             log_preds, h, readout = model.forward(data, h, readout)
             h_hist.append(h)
 
             # get prediction
-            if t == (time_steps - 1):
+            if is_last_time_step:
                 pred = log_preds.data.max(1, keepdim=True)[1]
-                correct += pred.eq(target.data.view_as(pred)).cpu().sum()
+                correct += pred.eq(labels.data.view_as(pred)).sum().item()
 
             # only update model every omega steps
             if not (t % omega == 0 and t > 0):
                 continue
 
-            optimizer.zero_grad()
-
-            spks = get_states([h_hist], decoder_layer + 1, model.d_hidden[decoder_layer], B, t, B)
-            out = decoder(torch.tensor(spks.mean(axis=1)).to(model.device))
-
-            l_clf = (t + 1) / k_updates * F.nll_loss(log_preds, target)
-            l_recon = F.mse_loss(out, data)
+            # loss calculations
+            l_clf = (t + 1) / k_updates * F.nll_loss(log_preds, labels)
             l_reg = get_regularizer_named_params(named_params, model.device, alpha, rho, _lambda=1.0)
-            # mem potential loss take l1 norm / num of neurons /batch size
             l_energy = model.get_energies() / B
             l_spike = model.get_spike_loss(histories=h) / B
 
-            # overall loss
-            loss = clf_alpha * l_clf + l_reg + energy_alpha * l_energy + spike_alpha * l_spike
+            if is_last_time_step:
+                spikes = get_states([h_hist], decoder_layer, model.d_hidden[decoder_layer], batch_size=B, T=t)
+                reconstruction = decoder(spikes.mean(dim=1).to(decoder.device))
+                l_recon = recon_alpha * F.mse_loss(reconstruction, data)
 
-            if self_supervised:
-                loss = loss + recon_alpha * l_recon
+            loss = l_reg + energy_alpha * l_energy + spike_alpha * l_spike
 
+            if supervised:
+                loss = loss + clf_alpha * l_clf
+            if self_supervised and is_last_time_step:
+                loss = loss + l_recon
+
+            # decoder update
+            optimizer.zero_grad()
+            decoder_optimizer.zero_grad()
+            if is_last_time_step:
+                l_recon.backward(retain_graph=True)
+                decoder_optimizer.step()
+
+            # model update
+            optimizer.zero_grad()
+            decoder_optimizer.zero_grad()
             loss.backward()
-
             if clip > 0:
                 torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
-
             optimizer.step()
             post_optimizer_updates(named_params, alpha, beta)
 
             train_loss += loss.item()
             total_clf_loss += l_clf.item()
-            total_recon_loss += l_recon.item()
+            if is_last_time_step:
+                total_recon_loss += (l_recon).item() / recon_alpha
             total_regularizaton_loss += l_reg
             total_energy_loss += l_energy.item()
             total_spike_loss += l_spike.item()
             model.reset_energies()
 
-        if i_batch > 0 and i_batch % log_interval == (log_interval - 1):
+        if (i_batch + 1) % log_interval == 0:
             print(
                 (
                     "Train Epoch: {} [{}/{} ({:.0f}%)] train acc: {:.2f} | L_total: {:.2f} | L_E: {:.2f}"

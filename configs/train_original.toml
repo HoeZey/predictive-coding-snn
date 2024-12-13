@@ -9,6 +9,7 @@ d_hidden = [600, 500, 500]
 n_classes = 10
 
 [training]
+supervised = true
 lr = 0.001
 clf_alpha = 1.0
 energy_alpha = 0.05  
@@ -17,13 +18,19 @@ n_batch = 256
 T = 50
 K = 10  
 clip = 1.0
-log_interval = 40
-epochs = 20
+log_interval = 30
+epochs = 30
 alpha = 0.2
 beta = 0.5
 rho = 0.0
 
+[checkpoint]
+file_name = "energy"
+
 [decoder]
 self_supervised = false
-recon_alpha = 0.0
+recon_alpha = 5.0
 decoder_layer = 1
+
+[reconstruction]
+decoder_layers = [0, 1, 2]

@@ -1,0 +1,36 @@
+[network]
+use_alif_neurons = true  
+one_to_one = true
+p_dropout = 0.4
+is_recurrent = false
+b0 = 0.1 
+d_in = 784
+d_hidden = [600, 500, 500]
+n_classes = 10
+
+[training]
+supervised = false
+lr = 0.001
+clf_alpha = 0.0
+energy_alpha = 0.05  
+spike_alpha = 0.0 
+n_batch = 256
+T = 50
+K = 10  
+clip = 1.0
+log_interval = 30
+epochs = 30
+alpha = 0.2
+beta = 0.5
+rho = 0.0
+
+[checkpoint]
+file_name = "self-supervised_last_layer"
+
+[decoder]
+self_supervised = true
+recon_alpha = 5.0
+decoder_layer = 2
+
+[reconstruction]
+decoder_layers = [0, 1, 2]
