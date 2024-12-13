@@ -11,7 +11,7 @@ from tqdm import tqdm
 from predcoding.snn.network import EnergySNN
 from predcoding.training import train_fptt, get_stats_named_params, reset_named_params
 from predcoding.experiments.eval import test
-from predcoding.experiments.decoder import LinearReadout
+from predcoding.experiments.decoder import LinearDecoder
 from predcoding.utils import count_parameters, save_checkpoint
 
 
@@ -69,7 +69,7 @@ def main():
         device=device,
     ).to(device)
 
-    decoder = LinearReadout(d_in=d_hidden[decoder_layer], d_out=d_in, device=device).to(device)
+    decoder = LinearDecoder(d_in=d_hidden[decoder_layer], d_out=d_in, device=device).to(device)
 
     model_param_count = count_parameters(model)
     decoder_param_count = count_parameters(decoder)
@@ -134,12 +134,12 @@ def main():
         if is_best:
             save_checkpoint(
                 {"state_dict": model.to("cpu").state_dict()},
-                prefix="checkpoints/",
+                prefix="checkpoints/train/",
                 filename=f"best_model_{config['checkpoint']['file_name']}.pt.tar",
             )
             save_checkpoint(
                 {"state_dict": decoder.to("cpu").state_dict()},
-                prefix="checkpoints/",
+                prefix="checkpoints/train/",
                 filename=f"decoder_{config['checkpoint']['file_name']}.pt.tar",
             )
 

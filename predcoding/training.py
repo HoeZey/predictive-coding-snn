@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 from predcoding.snn.network import EnergySNN
-from predcoding.experiments.decoder import LinearReadout, get_states
+from predcoding.experiments.decoder import LinearDecoder, get_states
 from torch.utils.data import DataLoader
 
 
@@ -63,7 +63,7 @@ def train_fptt(
     # decoder
     supervised=True,
     self_supervised=False,
-    decoder: LinearReadout = None,
+    decoder: LinearDecoder = None,
     decoder_layer: int = None,
     recon_alpha: float = None,
     decoder_optimizer: torch.optim.Optimizer = None,
@@ -85,11 +85,11 @@ def train_fptt(
         # to device and reshape
         data, labels = data.to(model.device), labels.to(model.device)
         data = data.view(-1, model.d_in)
-
         B = labels.size()[0]
-
         h_hist = []
+
         for t in range(time_steps):
+            is_last_time_step = t == (time_steps - 1)
             if t == 0:
                 h, readout = model.init_hidden(data.size(0))
             elif t % omega:
@@ -99,7 +99,7 @@ def train_fptt(
             h_hist.append(h)
 
             # get prediction
-            if t == (time_steps - 1):
+            if is_last_time_step:
                 pred = log_preds.data.max(1, keepdim=True)[1]
                 correct += pred.eq(labels.data.view_as(pred)).sum().item()
 
@@ -107,34 +107,34 @@ def train_fptt(
             if not (t % omega == 0 and t > 0):
                 continue
 
-            optimizer.zero_grad()
-            decoder_optimizer.zero_grad()
-
-            # compute reconstruction
-            spikes = get_states([h_hist], decoder_layer + 1, model.d_hidden[decoder_layer], B, t, B).to(decoder.device)
-            reconstruction = decoder(spikes.mean(dim=1))
-
             # loss calculations
             l_clf = (t + 1) / k_updates * F.nll_loss(log_preds, labels)
-            l_recon = recon_alpha * F.mse_loss(reconstruction, data)
             l_reg = get_regularizer_named_params(named_params, model.device, alpha, rho, _lambda=1.0)
             l_energy = model.get_energies() / B
             l_spike = model.get_spike_loss(histories=h) / B
+
+            if is_last_time_step:
+                spikes = get_states([h_hist], decoder_layer, model.d_hidden[decoder_layer], batch_size=B, T=t)
+                reconstruction = decoder(spikes.mean(dim=1).to(decoder.device))
+                l_recon = recon_alpha * F.mse_loss(reconstruction, data)
 
             loss = l_reg + energy_alpha * l_energy + spike_alpha * l_spike
 
             if supervised:
                 loss = loss + clf_alpha * l_clf
-            if self_supervised:
-                loss = loss + recon_alpha * l_recon
+            if self_supervised and is_last_time_step:
+                loss = loss + l_recon
 
             # decoder update
             optimizer.zero_grad()
             decoder_optimizer.zero_grad()
-            (recon_alpha * l_recon).backward(retain_graph=True)
-            decoder_optimizer.step()
+            if is_last_time_step:
+                l_recon.backward(retain_graph=True)
+                decoder_optimizer.step()
 
             # model update
+            optimizer.zero_grad()
+            decoder_optimizer.zero_grad()
             loss.backward()
             if clip > 0:
                 torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
@@ -143,7 +143,8 @@ def train_fptt(
 
             train_loss += loss.item()
             total_clf_loss += l_clf.item()
-            total_recon_loss += l_recon.item()
+            if is_last_time_step:
+                total_recon_loss += (l_recon).item() / recon_alpha
             total_regularizaton_loss += l_reg
             total_energy_loss += l_energy.item()
             total_spike_loss += l_spike.item()

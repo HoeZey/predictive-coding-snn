@@ -8,9 +8,9 @@ from predcoding.snn.network import EnergySNN
 
 
 # linear decoder, but change the following class to other decoder types if necessary
-class LinearReadout(nn.Module):
+class LinearDecoder(nn.Module):
     def __init__(self, d_in, d_out, device, d_hidden=None):
-        super(LinearReadout, self).__init__()
+        super(LinearDecoder, self).__init__()
         self.d_in = d_in
         self.d_out = d_out
         self.d_hidden = d_hidden
@@ -32,7 +32,7 @@ class LinearReadout(nn.Module):
         return x
 
 
-def get_states(hiddens_all_: list, layer: int, d_hidden: int, batch_size, T=20, num_samples=10000):
+def get_states(hiddens_all_: list, layer: int, d_hidden: int, batch_size, T=20):
     """
     get a particular internal state depending on index passed to hidden
 
@@ -45,7 +45,7 @@ def get_states(hiddens_all_: list, layer: int, d_hidden: int, batch_size, T=20, 
         np.array containing desired states
     """
 
-    all_states = torch.zeros((num_samples, T, d_hidden))
+    all_states = torch.zeros((batch_size, T, d_hidden))
 
     for batch_idx in range(len(hiddens_all_)):
         for t in range(T):
@@ -62,55 +62,36 @@ def train_linear_proj(
     data_loader,
     d_hidden,
     d_in,
-    batch_size,
     T,
     device,
     fn_loss=nn.MSELoss(),
 ):
-    mlp = LinearReadout(d_hidden, d_in, model.d_hidden[layer]).to(device)
-    optimizer = optim.Adam(mlp.parameters(), lr=0.001, weight_decay=0.0001)
-
+    decoder = LinearDecoder(d_hidden, d_in, device)
+    optimizer = optim.Adam(decoder.parameters(), lr=0.001, weight_decay=0.0001)
+    model.eval()
+    decoder.train()
     loss_log = []
 
-    for e in tqdm(range(epochs)):
-        for i, (data, target) in enumerate(data_loader):
+    for _ in range(epochs):
+        for _, (data, target) in enumerate(data_loader):
             data, target = data.to(device), target.to(device)
             data = data.view(-1, model.d_in)
+            B = data.shape[0]
 
             with torch.no_grad():
-                model.eval()
-
                 hidden, readout = model.init_hidden(data.size(0))
 
-                _, h = model.inference(data, hidden, readout, T)
-            spks = get_states([h], layer + 1, d_hidden, batch_size, T, batch_size)
+                _, h_hist = model.inference(data, hidden, readout, T)
+            spikes = get_states([h_hist], layer, d_hidden, B, T)
+            reconstruction = decoder(spikes.mean(axis=1).to(device))
 
-            train_data = torch.tensor(spks.mean(axis=1)).to(device)
-            # print(train_data.size())
+            loss = fn_loss(reconstruction, data)
+            loss_log.append(loss.item())
 
             optimizer.zero_grad()
-
-            out = mlp(train_data)
-            loss = fn_loss(out, data)
-            loss_log.append(loss.data.cpu())
-
             loss.backward()
             optimizer.step()
 
-        print("%i train loss: %.4f" % (e, loss))
+    print(f"L{layer + 1} final train loss: {loss:.4f}")
 
-        if e % 5 == 0:
-            plt.imshow(out[target == 0][0].cpu().detach().reshape(28, 28))
-            plt.title(f"sample1 {target[target == 0][0].item()}")
-            plt.show()
-
-            # find the next image with class 0
-            # plt.imshow(out[target == 0][1].cpu().detach().reshape(28, 28))
-            # plt.title('sample2 %i' % target[target == 0][1].item())
-            # plt.show()
-
-    torch.cuda.empty_cache()
-
-    mlp.eval()
-
-    return mlp, [i.cpu() for i in loss_log]
+    return decoder, loss_log
