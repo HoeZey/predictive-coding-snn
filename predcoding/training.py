@@ -261,13 +261,12 @@ def train_fptt_bottleneck(
             print(
                 (
                     "Train Epoch: {} batch {} | L_total: {:.2f} | L_E: {:.2f}"
-                    + " | L_clf: {:.2f} | L_rec: {:.2f} | L_reg: {:.2f} | fr: {:.2f}"
+                    + " | L_rec: {:.2f} | L_reg: {:.2f} | fr: {:.2f}"
                 ).format(
                     epoch,
                     i_batch + 1,
                     train_loss / log_interval,
                     total_energy_loss / log_interval,
-                    total_clf_loss / log_interval,
                     total_recon_loss / log_interval,
                     total_regularizaton_loss / log_interval,
                     model.firing_rates / T / log_interval,
@@ -275,7 +274,6 @@ def train_fptt_bottleneck(
             )
 
             train_loss = 0
-            total_clf_loss = 0
             total_recon_loss = 0
             total_regularizaton_loss = 0
             total_energy_loss = 0
