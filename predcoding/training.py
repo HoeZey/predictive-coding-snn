@@ -223,8 +223,8 @@ def train_fptt_bottleneck(
         h, readout = model.init_hidden(data.size(0))
 
         for t in range(T):
-            # if t % update_interval:
-            #     h, readout = [value.detach() for value in h], readout.detach()
+            if t % update_interval:
+                h, readout = [value.detach() for value in h], readout.detach()
 
             _, h, readout = model.forward(data, h, readout)
 
