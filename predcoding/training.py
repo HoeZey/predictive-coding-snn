@@ -241,7 +241,7 @@ def train_fptt_bottleneck(
 
             # decoder update
             optimizer.zero_grad()
-            loss.backward()
+            loss.backward(retain_graph=True)
             if clip_value > 0:
                 torch.nn.utils.clip_grad_norm_(model.parameters(), clip_value)
             optimizer.step()
