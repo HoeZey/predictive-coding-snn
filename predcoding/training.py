@@ -229,7 +229,7 @@ def train_fptt_bottleneck(
             _, h, readout = model.forward(data, h, readout)
 
             # add spike to spike history
-            h_hist[:, t] = h[layer_to_decode].spikes.detach()
+            h_hist[:, t] = h[layer_to_decode].spikes
 
             # only update model every omega steps
             if not (t % update_interval == 0 and t > 0):
