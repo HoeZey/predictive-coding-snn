@@ -46,7 +46,7 @@ class EnergySNN(nn.Module):
         self.b0 = b0
         self.device = device
 
-        self.firing_rates: list[torch.FloatTensor] = [0] * len(d_hidden)
+        self.firing_rates: list[float] = [0] * len(d_hidden)
         self.energies: list[torch.FloatTensor] = [0] * len(d_hidden)
 
         self.dropout = nn.Dropout(p_dropout)
