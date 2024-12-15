@@ -101,11 +101,7 @@ class EnergySNN(nn.Module):
             self.energies[i] = dendrites - soma
             self.firing_rates[i] += spikes.detach().mean().item()
 
-        readout = torch.zeros_like(readout)
-        # readout = self.output_layer.forward(x_t=spikes, mem_t=readout)
-        log_softmax = F.log_softmax(readout, dim=1)
-
-        return log_softmax, new_histories, readout
+        return new_histories, self.output_layer.forward(x_t=spikes, mem_t=readout)
 
     def forward_reconstruct(
         self, x_t, histories: list[LayerHidden], readout: torch.FloatTensor

@@ -68,35 +68,26 @@ def main():
         b0=config["network"]["b0"],
         device=device,
     ).to(device)
-    decoder = LinearDecoder(d_in=d_hidden[decoder_layer], d_out=d_in, device=device).to(device)
 
     model_param_count = count_parameters(model)
-    decoder_param_count = count_parameters(decoder)
-    print(
-        f"Model params: {model_param_count} | Decoder params: {decoder_param_count} | Total: {model_param_count + decoder_param_count}"
-    )
+    print(f"Model params: {model_param_count}")
 
     # define optimiser
     optimizer = optim.Adamax(model.parameters(), lr=lr, weight_decay=0.0001)
     model_params = get_stats_named_params(model)
-    decoder_params = get_stats_named_params(decoder)
 
     model.train()
-    decoder.train()
 
     for epoch in tqdm(range(epochs), total=epochs):
         train_fptt_bottleneck(
             # models
             model=model,
-            decoder=decoder,
-            layer_to_decode=decoder_layer,
             # training
             T=T,  # number of timesteps
             K=K,  # number of updates
             update_interval=omega,
             data_loader=train_loader,
             model_params=model_params,
-            decoder_params=decoder_params,
             # optimization
             optimizer=optimizer,
             alpha_recon=config["decoder"]["recon_alpha"],
@@ -113,17 +104,11 @@ def main():
         )
 
         reset_named_params(model_params)
-        reset_named_params(decoder_params)
 
     save_checkpoint(
         {"state_dict": model.to("cpu").state_dict()},
         prefix="checkpoints/train/",
         filename=f"best_model_{config['checkpoint']['file_name']}.pt.tar",
-    )
-    save_checkpoint(
-        {"state_dict": decoder.to("cpu").state_dict()},
-        prefix="checkpoints/train/",
-        filename=f"decoder_{config['checkpoint']['file_name']}.pt.tar",
     )
 
 

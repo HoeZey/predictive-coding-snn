@@ -182,15 +182,12 @@ def train_fptt(
 def train_fptt_bottleneck(
     # models
     model: EnergySNN,
-    decoder: LinearDecoder,
-    layer_to_decode: int,
     # training
     T: int,  # number of timesteps
     K: int,  # number of updates
     update_interval: int,
     data_loader: DataLoader,
     model_params: dict,
-    decoder_params: dict,
     # optimization
     optimizer: torch.optim.Optimizer,
     alpha_energy: float,
@@ -219,22 +216,20 @@ def train_fptt_bottleneck(
         data, labels = data.to(model.device), labels.to(model.device)
         data = data.view(-1, model.d_in)
         B = labels.size()[0]
-        h_hist = torch.zeros((B, T, model.d_hidden[layer_to_decode]), device=model.device)
         h, readout = model.init_hidden(data.size(0))
 
         for t in range(T):
-            _, h, readout = model.forward(data, h, readout)
+            if t % update_interval:
+                h, readout = [value.detach() for value in h], readout.detach()
 
-            # add spike to spike history
-            h_hist[:, t] = h[layer_to_decode].spikes
+            _, h, readout = model.forward(data, h, readout)
 
             # only update model every omega steps
             if not (t % update_interval == 0 and t > 0):
                 continue
 
             # loss calculations
-            reconstruction = decoder(h_hist[:, : t + 1].mean(dim=1))
-            l_recon = (t + 1) / K * F.mse_loss(reconstruction, data)
+            l_recon = (t + 1) / K * F.mse_loss(readout, data)
             l_energy = model.get_energies() / B
             l_reg = get_regularizer_named_params(model_params, model.device, alpha, rho, _lambda=1.0)
             loss = alpha_recon * l_recon + alpha_energy * l_energy + l_reg
@@ -246,16 +241,12 @@ def train_fptt_bottleneck(
                 torch.nn.utils.clip_grad_norm_(model.parameters(), clip_value)
             optimizer.step()
             post_optimizer_updates(model_params, alpha, beta)
-            post_optimizer_updates(decoder_params, alpha, beta)
 
             train_loss += loss.item()
             total_recon_loss += l_recon.item()
             total_energy_loss += l_energy.item()
             total_regularizaton_loss += l_reg
             model.reset_energies()
-
-            if t % update_interval:
-                h, readout = [value.detach() for value in h], readout.detach()
 
         if (i_batch + 1) % log_interval == 0:
             print(

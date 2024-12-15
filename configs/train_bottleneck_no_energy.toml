@@ -6,7 +6,7 @@ is_recurrent = false
 b0 = 0.1 
 d_in = 784
 d_hidden = [500, 250, 50]
-n_classes = 10
+d_out = 784
 
 [training]
 supervised = false
@@ -15,7 +15,7 @@ clf_alpha = 0.0
 energy_alpha = 0.0
 spike_alpha = 0.0 
 n_batch = 256
-T = 50
+T = 150
 K = 10  
 clip = 1.0
 log_interval = 20
