@@ -101,6 +101,45 @@ class EnergySNN(nn.Module):
             self.energies[i] = dendrites - soma
             self.firing_rates[i] += spikes.detach().mean().item()
 
+        readout = torch.zeros_like(readout)
+        # readout = self.output_layer.forward(x_t=spikes, mem_t=readout)
+        log_softmax = F.log_softmax(readout, dim=1)
+
+        return log_softmax, new_histories, readout
+
+    def forward_reconstruct(
+        self, x_t, histories: list[LayerHidden], readout: torch.FloatTensor
+    ) -> tuple[torch.FloatTensor, list[LayerHidden], torch.FloatTensor]:
+        batch_dim, input_size = x_t.shape
+        spikes = self.dropout(x_t.reshape(batch_dim, input_size).float() * 0.5)
+
+        new_histories = []
+
+        for i, (layer, ff_connections, fb_connections, h) in enumerate(
+            zip(
+                self.hidden_layers,
+                self.forward_connections,
+                self.backward_connections,
+                histories,
+            )
+        ):
+            is_last_layer = i + 1 == len(self.hidden_layers)
+            fb_input = histories[i + 1].spikes if not is_last_layer else F.normalize(readout, dim=1)
+
+            soma, spikes, dendrites, b = layer(
+                ff=ff_connections(spikes),
+                fb=fb_connections(fb_input),
+                soma_t=h.soma,
+                spike_t=h.spikes,
+                a_curr_t=h.dendrites,
+                b_t=h.b,
+            )
+
+            h1 = LayerHidden(soma=soma, spikes=spikes, dendrites=dendrites, b=b)
+            new_histories.append(h1)
+            self.energies[i] = dendrites - soma
+            self.firing_rates[i] += spikes.detach().mean().item()
+
         readout = self.output_layer.forward(x_t=spikes, mem_t=readout)
         log_softmax = F.log_softmax(readout, dim=1)
 
