@@ -28,20 +28,14 @@ def main():
     # network parameters
     d_in = config["network"]["d_in"]
     d_hidden = config["network"]["d_hidden"]
-    n_classes = config["network"]["n_classes"]
+    d_out = config["network"]["d_out"]
 
     # training parameters
-    supervised = config["training"]["supervised"]
     epochs = config["training"]["epochs"]
     lr = config["training"]["lr"]
     T = config["training"]["T"]
     K = config["training"]["K"]  # k_updates is num updates per sequence
     omega = int(T / K)  # update frequency
-
-    # self_supervised params
-    self_supervised = config["decoder"]["self_supervised"]
-    recon_alpha = config["decoder"]["recon_alpha"]
-    decoder_layer = config["decoder"]["decoder_layer"]
 
     # device
     torch.manual_seed(999)
@@ -54,13 +48,12 @@ def main():
     traindata = torchvision.datasets.MNIST(root="./data", train=True, download=True, transform=transform)
     testdata = torchvision.datasets.MNIST(root="./data", train=False, download=True, transform=transform)
     train_loader = torch.utils.data.DataLoader(traindata, batch_size=batch_size, shuffle=False, num_workers=2)
-    test_loader = torch.utils.data.DataLoader(testdata, batch_size=batch_size, shuffle=False, num_workers=2)
 
     # define network
     model = EnergySNN(
         d_in,
         d_hidden,
-        d_out=n_classes,
+        d_out=d_out,
         is_adaptive=config["network"]["use_alif_neurons"],
         one_to_one=config["network"]["one_to_one"],
         p_dropout=config["network"]["p_dropout"],
