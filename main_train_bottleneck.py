@@ -99,7 +99,7 @@ def main():
             decoder_params=decoder_params,
             # optimization
             optimizer=optimizer,
-            alpha_clf=config["training"]["clf_alpha"],
+            alpha_recon=config["decoder"]["recon_alpha"],
             alpha_energy=config["training"]["energy_alpha"],
             clip_value=config["training"]["clip"],
             # fptt regularizer parameters
