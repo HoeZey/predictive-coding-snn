@@ -222,7 +222,7 @@ def train_fptt_bottleneck(
             if t % update_interval:
                 h, readout = [value.detach() for value in h], readout.detach()
 
-            _, h, readout = model.forward(data, h, readout)
+            h, readout = model.forward(data, h, readout)
 
             # only update model every omega steps
             if not (t % update_interval == 0 and t > 0):
