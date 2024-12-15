@@ -223,9 +223,6 @@ def train_fptt_bottleneck(
         h, readout = model.init_hidden(data.size(0))
 
         for t in range(T):
-            if t % update_interval:
-                h, readout = [value.detach() for value in h], readout.detach()
-
             _, h, readout = model.forward(data, h, readout)
 
             # add spike to spike history
@@ -256,6 +253,9 @@ def train_fptt_bottleneck(
             total_energy_loss += l_energy.item()
             total_regularizaton_loss += l_reg
             model.reset_energies()
+
+            if t % update_interval:
+                h, readout = [value.detach() for value in h], readout.detach()
 
         if (i_batch + 1) % log_interval == 0:
             print(
