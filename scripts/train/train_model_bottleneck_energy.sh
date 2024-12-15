@@ -15,5 +15,5 @@ module load Anaconda3/2023.07-2
 cd $HOME/nddl/
 
 source activate nddl
-srun python main_train_bottleneck.py -f configs/train_bottleneck.toml
+srun python main_train_bottleneck.py -f configs/train_bottleneck_energy.toml
 conda deactivate

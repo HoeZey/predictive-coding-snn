@@ -87,12 +87,10 @@ def train_fptt(
         data = data.view(-1, model.d_in)
         B = labels.size()[0]
         h_hist = []
-
+        h, readout = model.init_hidden(data.size(0))
         for t in range(time_steps):
             is_last_time_step = t == (time_steps - 1)
-            if t == 0:
-                h, readout = model.init_hidden(data.size(0))
-            elif t % omega:
+            if t % omega:
                 h, readout = [value.detach() for value in h], readout.detach()
 
             log_preds, h, readout = model.forward(data, h, readout)
@@ -222,17 +220,16 @@ def train_fptt_bottleneck(
         data = data.view(-1, model.d_in)
         B = labels.size()[0]
         h_hist = torch.zeros((B, T, model.d_hidden[layer_to_decode]), device=model.device)
+        h, readout = model.init_hidden(data.size(0))
 
         for t in range(T):
-            if t == 0:
-                h, readout = model.init_hidden(data.size(0))
-            elif t % update_interval:
-                h, readout = [value.detach() for value in h], readout.detach()
+            # if t % update_interval:
+            #     h, readout = [value.detach() for value in h], readout.detach()
 
             _, h, readout = model.forward(data, h, readout)
 
             # add spike to spike history
-            h_hist[:, t] = h[layer_to_decode].spikes.detach()
+            h_hist[:, t] = h[layer_to_decode].spikes
 
             # only update model every omega steps
             if not (t % update_interval == 0 and t > 0):
@@ -255,7 +252,7 @@ def train_fptt_bottleneck(
             post_optimizer_updates(decoder_params, alpha, beta)
 
             train_loss += loss.item()
-            total_recon_loss += (l_recon).item() / alpha_recon
+            total_recon_loss += l_recon.item()
             total_energy_loss += l_energy.item()
             total_regularizaton_loss += l_reg
             model.reset_energies()
