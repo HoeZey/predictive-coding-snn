@@ -3,6 +3,7 @@ import torch.nn.functional as F
 from predcoding.snn.network import EnergySNN
 from predcoding.experiments.decoder import LinearDecoder, get_states
 from torch.utils.data import DataLoader
+import matplotlib.pyplot as plt
 
 
 def get_stats_named_params(model: EnergySNN):
@@ -33,7 +34,7 @@ def get_regularizer_named_params(named_params, device, alpha, rho, _lambda=1.0):
         r_p = _lambda * 0.5 * alpha * torch.sum(torch.square(param - sm))
         regularization += r_p
         # print(name,r_p)
-    return regularization
+    return regularization + 0.00001
 
 
 def reset_named_params(named_params):
@@ -198,6 +199,8 @@ def train_fptt_bottleneck(
     beta: float,
     rho: float,
     # other
+    file_name: str,
+    timestamp: str,
     epoch: int,
     log_interval: int,
     debug=False,
@@ -249,6 +252,16 @@ def train_fptt_bottleneck(
             model.reset_energies()
 
         if (i_batch + 1) % log_interval == 0:
+            fig, axs = plt.subplots(1, 10, figsize=(10, 1), dpi=200)
+            for n in range(10):
+                axs[n].imshow(readout[labels == n][0].detach().cpu().reshape(28, 28).numpy())
+                axs[n].set_title(n)
+                axs[n].axis("off")
+            fig.savefig(
+                f"images/reconstructions/{file_name}/{timestamp}/e={epoch}-b={i_batch}-loss={l_recon.item():.2f}.png"
+            )
+            plt.close()
+
             print(
                 (
                     "Train Epoch: {} batch {} | L_total: {:.2f} | L_E: {:.2f}"

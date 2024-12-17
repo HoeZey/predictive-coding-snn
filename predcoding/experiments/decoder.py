@@ -44,18 +44,14 @@ def get_states(hiddens_all_: list, layer: int, d_hidden: int, batch_size, T=20):
     Returns:
         np.array containing desired states
     """
-
     all_states = torch.zeros((batch_size, T, d_hidden))
-
-    for batch_idx in range(len(hiddens_all_)):
+    for i_batch in range(len(hiddens_all_)):
         for t in range(T):
-            spikes_t = hiddens_all_[batch_idx][t][layer].spikes.detach()
-            all_states[:, t] = spikes_t
-
+            all_states[:, t] = hiddens_all_[i_batch][t][layer].spikes.detach()
     return all_states
 
 
-def train_linear_proj(
+def train_recon_decoder(
     epochs,
     layer,
     model: EnergySNN,
@@ -95,3 +91,43 @@ def train_linear_proj(
     print(f"L{layer + 1} final train loss: {loss:.4f}")
 
     return decoder, loss_log
+
+
+def train_clf_decoder(
+    model: EnergySNN,
+    layer,
+    d_hidden,
+    d_out,
+    data_loader,
+    epochs,
+    T,
+    device,
+    fn_loss=nn.MSELoss(),
+):
+    decoder = LinearDecoder(d_hidden, d_out, device)
+    optimizer = optim.Adam(decoder.parameters(), lr=0.001, weight_decay=0.0001)
+    model.eval()
+    decoder.train()
+    losses = []
+    for _ in range(epochs):
+        for _, (data, target) in enumerate(data_loader):
+            data, target = data.to(device), target.to(device)
+            data = data.view(-1, model.d_in)
+            B = data.shape[0]
+
+            with torch.no_grad():
+                hidden, readout = model.init_hidden(data.size(0))
+                _, h_hist = model.inference(data, hidden, readout, T)
+
+            spikes = get_states([h_hist], layer, d_hidden, B, T)
+            out = decoder(spikes.mean(axis=1).to(device))
+
+            loss = fn_loss(out, data)
+            losses.append(loss.item())
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+    print(f"L{layer + 1} final train loss: {loss:.4f}")
+    return decoder, losses

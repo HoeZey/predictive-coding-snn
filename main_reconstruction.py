@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 
 from predcoding.snn.network import EnergySNN
 from predcoding.experiments.eval import test
-from predcoding.experiments.decoder import train_linear_proj, get_states
+from predcoding.experiments.decoder import train_decoder_classifier, get_states
 from predcoding.utils import model_result_dict_load
 
 
@@ -98,7 +98,7 @@ def main():
     decoders = [
         (
             layer,
-            train_linear_proj(20, layer, model, test_loader2, d_hidden[layer], d_in, T, device, fn_loss)[0],
+            train_decoder_classifier(20, layer, model, test_loader2, d_hidden[layer], d_in, T, device, fn_loss)[0],
         )
         for layer in layers
     ]

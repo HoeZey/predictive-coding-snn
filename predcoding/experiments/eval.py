@@ -36,3 +36,15 @@ def test(model: EnergySNN, test_loader, time_steps):
     print(f"Test set: Average loss: {test_loss:.4f}, Accuracy: {correct}/{len(test_loader.dataset)} ({test_acc:.2f}%)")
 
     return test_loss, 100.0 * correct / len(test_loader.dataset)
+
+
+def test_reconstruction(model: EnergySNN, test_loader, T):
+    test_loss = 0.0
+    for data, _ in test_loader:
+        data = data.view(-1, model.d_in).to(model.device)
+        h, readout = model.init_hidden(data.shape[0])
+        with torch.no_grad():
+            readout, _ = model.inference(data, h, readout, T)
+            test_loss += F.mse_loss(readout, data, reduction="sum").item()
+        torch.cuda.empty_cache()
+    return test_loss / len(test_loader.dataset)

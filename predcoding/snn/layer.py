@@ -141,9 +141,9 @@ class OutputLayer(nn.Module):
 
         if is_fc:
             self.fc = nn.Linear(d_in, d_out, bias=bias)
+            nn.init.xavier_uniform_(self.fc.weight)
             if bias:
                 nn.init.constant_(self.fc.bias, 0)
-            nn.init.xavier_uniform_(self.fc.weight)
 
         # tau_m
         if tau_fixed is None:

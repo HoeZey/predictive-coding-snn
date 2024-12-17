@@ -82,7 +82,7 @@ def main():
     decoder_optimizer = optim.Adam(decoder.parameters(), lr=lr, weight_decay=0.0001)
 
     # reduce the learning after 20 epochs by a factor of 10
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=2, gamma=0.5)
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.5)
 
     model_params = get_stats_named_params(model)
     decoder_params = get_stats_named_params(decoder)

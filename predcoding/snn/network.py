@@ -103,45 +103,7 @@ class EnergySNN(nn.Module):
 
         return new_histories, self.output_layer.forward(x_t=spikes, mem_t=readout)
 
-    def forward_reconstruct(
-        self, x_t, histories: list[LayerHidden], readout: torch.FloatTensor
-    ) -> tuple[torch.FloatTensor, list[LayerHidden], torch.FloatTensor]:
-        batch_dim, input_size = x_t.shape
-        spikes = self.dropout(x_t.reshape(batch_dim, input_size).float() * 0.5)
-
-        new_histories = []
-
-        for i, (layer, ff_connections, fb_connections, h) in enumerate(
-            zip(
-                self.hidden_layers,
-                self.forward_connections,
-                self.backward_connections,
-                histories,
-            )
-        ):
-            is_last_layer = i + 1 == len(self.hidden_layers)
-            fb_input = histories[i + 1].spikes if not is_last_layer else F.normalize(readout, dim=1)
-
-            soma, spikes, dendrites, b = layer(
-                ff=ff_connections(spikes),
-                fb=fb_connections(fb_input),
-                soma_t=h.soma,
-                spike_t=h.spikes,
-                a_curr_t=h.dendrites,
-                b_t=h.b,
-            )
-
-            h1 = LayerHidden(soma=soma, spikes=spikes, dendrites=dendrites, b=b)
-            new_histories.append(h1)
-            self.energies[i] = dendrites - soma
-            self.firing_rates[i] += spikes.detach().mean().item()
-
-        readout = self.output_layer.forward(x_t=spikes, mem_t=readout)
-        log_softmax = F.log_softmax(readout, dim=1)
-
-        return log_softmax, new_histories, readout
-
-    def inference(self, x_t, h, readout, T, bystep=None):
+    def inference(self, x, h, readout, T):
         """
         only called during inference
         :param x_t: input
@@ -150,20 +112,11 @@ class EnergySNN(nn.Module):
         :param bystep: if true, then x_t is a sequence
         :return:
         """
-
-        log_softmax_hist = []
         h_hist = []
-
-        for t in range(T):
-            if bystep is None:
-                log_softmax, h, readout = self.forward(x_t, h, readout)
-            else:
-                log_softmax, h, readout = self.forward(x_t[t], h, readout)
-
-            log_softmax_hist.append(log_softmax)
+        for _ in range(T):
+            h, readout = self.forward(x, h, readout)
             h_hist.append(h)
-
-        return log_softmax_hist, h_hist
+        return readout, h_hist
 
     def init_hidden(self, n_batch, all_zero=False) -> tuple[list[LayerHidden], torch.FloatTensor]:
         histories = [

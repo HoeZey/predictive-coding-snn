@@ -1,0 +1,2 @@
+sbatch scripts/train/train_model_bottleneck_no_energy.sh 
+sbatch scripts/train/train_model_bottleneck_energy.sh 

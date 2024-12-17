@@ -2,11 +2,11 @@
 
 #SBATCH --partition=gpu
 #SBATCH --gpus=1
-#SBATCH --job-name=TRAIN_BOTTLENECK
+#SBATCH --job-name=TR_B_E
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
-#SBATCH --time=4:00:00
-#SBATCH --output=outputs/train_model/bottleneck/output_%A.out
+#SBATCH --time=1:00:00
+#SBATCH --output=outputs/train_model/bottleneck_E/output_%A.out
 
 module purge
 module load 2023
