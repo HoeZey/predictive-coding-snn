@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import tqdm
 from predcoding.snn.network import EnergySNN
+from predcoding.snn.hidden import LayerHidden
 
 
 # linear decoder, but change the following class to other decoder types if necessary
@@ -33,7 +34,7 @@ class LinearDecoder(nn.Module):
         return x
 
 
-def get_states(h_hist: list, layer: int, d_hidden: int, batch_size, T=20):
+def get_states(h_hist: list[list[LayerHidden]], layer: int, d_hidden: int, batch_size, T=20, element="spike"):
     """
     get a particular internal state depending on index passed to hidden
 
@@ -47,7 +48,12 @@ def get_states(h_hist: list, layer: int, d_hidden: int, batch_size, T=20):
     """
     all_states = torch.zeros((batch_size, T, d_hidden))
     for t in range(T):
-        all_states[:, t] = h_hist[t][layer].spikes.detach()
+        if element == "spike":
+            all_states[:, t] = h_hist[t][layer].spikes.detach()
+        elif element == "dendrite":
+            all_states[:, t] = h_hist[t][layer].dendrites.detach()
+        elif element == "soma":
+            all_states[:, t] = h_hist[t][layer].soma.detach()
     return all_states
 
 
@@ -76,9 +82,8 @@ def train_recon_decoder(
 
             with torch.no_grad():
                 hidden, readout = model.init_hidden(data.size(0))
-
-                _, h_hist = model.inference(data, hidden, readout, T)
-            spikes = get_states([h_hist], layer, d_hidden, B, T)
+                h_hist, _ = model.inference(data, hidden, readout, T)
+            spikes = get_states(h_hist, layer, d_hidden, B, T)
             reconstruction = decoder(spikes.mean(axis=1).to(device))
 
             loss = fn_loss(reconstruction, data)
@@ -121,7 +126,7 @@ def train_clf_decoder(
 
             with torch.no_grad():
                 hidden, readout = model.init_hidden(B)
-                _, h_hist = model.inference(data, hidden, readout, T)
+                h_hist, _ = model.inference(data, hidden, readout, T)
 
             spikes = get_states(h_hist, layer_to_decode, d_hidden, B, T)
             logits = decoder(spikes.mean(axis=1).to(device))
