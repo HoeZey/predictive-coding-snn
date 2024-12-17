@@ -1,4 +1,0 @@
-sbatch scripts/reconstruct/reconstruct_control.sh
-sbatch scripts/reconstruct/reconstruct_original.sh
-sbatch scripts/reconstruct/reconstruct_mix.sh
-sbatch scripts/reconstruct/reconstruct_ss_only.sh

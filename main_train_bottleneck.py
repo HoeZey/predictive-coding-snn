@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import json
 from pip._vendor import tomli as tomllib
 import argparse
@@ -15,7 +16,6 @@ from math import inf
 from predcoding.snn.network import EnergySNN
 from predcoding.training import train_fptt_bottleneck, get_stats_named_params, reset_named_params
 from predcoding.experiments.eval import test_reconstruction
-from predcoding.experiments.decoder import LinearDecoder
 from predcoding.utils import count_parameters, save_checkpoint
 
 
@@ -36,7 +36,7 @@ def main():
     timestamp = datetime.now().strftime("%Y-%m-%d_%H:%M")
     file_name = config["checkpoint"]["file_name"]
     os.mkdir(f"./images/reconstructions/{file_name}/{timestamp}")
-    os.mkdir(f"./images/test_losses/{file_name}/{timestamp}")
+    os.mkdir(f"./checkpoints/{file_name}")
 
     # network parameters
     d_in = config["network"]["d_in"]
@@ -123,19 +123,21 @@ def main():
         if is_best:
             save_checkpoint(
                 {"state_dict": model.to("cpu").state_dict()},
-                prefix="checkpoints/bottleneck/",
+                prefix=f"checkpoints/{file_name}",
                 filename=f"best_model_{file_name}.pt.tar",
             )
             model.to(device)
         all_test_losses.append(test_loss)
         print()
 
+    test_losses_img_path = "./images/test_losses/{file_name}/{timestamp}"
+    Path(test_losses_img_path).mkdir(parents=True, exist_ok=True)
     plt.figure(figsize=(6, 3), dpi=200)
     plt.plot(range(epochs), all_test_losses)
     plt.title(f"Test losses over time for {file_name} model")
     plt.xlabel("epochs")
     plt.ylabel("loss")
-    plt.savefig(f"images/test_losses/{file_name}/{timestamp}/test_losses.png")
+    plt.savefig(f"{test_losses_img_path}/test_losses.png")
     plt.close()
 
 
