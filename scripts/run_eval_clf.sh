@@ -1,0 +1,2 @@
+sbatch scripts/eval/eval_clf_bottleneck_E.sh
+sbatch scripts/eval/eval_clf_bottleneck_NE.sh

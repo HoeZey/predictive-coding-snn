@@ -70,7 +70,7 @@ class EnergySNN(nn.Module):
 
     def forward(
         self, x_t, histories: list[LayerHidden], readout: torch.FloatTensor
-    ) -> tuple[torch.FloatTensor, list[LayerHidden], torch.FloatTensor]:
+    ) -> tuple[list[LayerHidden], torch.FloatTensor]:
         batch_dim, input_size = x_t.shape
         spikes = self.dropout(x_t.reshape(batch_dim, input_size).float() * 0.5)
 
@@ -103,7 +103,7 @@ class EnergySNN(nn.Module):
 
         return new_histories, self.output_layer.forward(x_t=spikes, mem_t=readout)
 
-    def inference(self, x, h, readout, T):
+    def inference(self, x, h, readout, T, clamp=False):
         """
         only called during inference
         :param x_t: input
@@ -114,53 +114,18 @@ class EnergySNN(nn.Module):
         """
         h_hist = []
         for _ in range(T):
-            h, readout = self.forward(x, h, readout)
+            if clamp:
+                h, _ = self.forward(x, h, readout)
+            else:
+                h, readout = self.forward(x, h, readout)
             h_hist.append(h)
-        return readout, h_hist
+        return h_hist, readout
 
     def init_hidden(self, n_batch, all_zero=False) -> tuple[list[LayerHidden], torch.FloatTensor]:
         histories = [
             LayerHidden.get_layer_history(n_batch, d, self.b0, self.device, all_zero=all_zero) for d in self.d_hidden
         ]
         return (histories, torch.zeros(n_batch, self.d_out, device=self.device))
-
-    def clamped_generate(
-        self,
-        test_class,
-        zeros,
-        hidden_clamped,
-        readout_clamped: torch.Tensor,
-        T,
-        clamp_value=0.5,
-        noise=None,
-    ):
-        """
-        generate representations with mem of read out clamped
-        :param test_class: which class is clamped
-        :param zeros: input containing zeros, absence of input
-        :param h: hidden states
-        :param T: sequence length
-        :param noise: noise values
-        :param index: index in h where noise is added to
-        :return:
-        """
-
-        log_softmax_hist = []
-        h_hist = []
-
-        for _ in range(T):
-            readout_clamped = readout_clamped.fill_(-clamp_value)
-            readout_clamped[:, test_class] = clamp_value
-
-            if noise is not None:
-                readout_clamped[:] += noise
-
-            log_softmax, hidden_clamped, readout_clamped = self.forward(zeros, hidden_clamped, readout_clamped)
-
-            log_softmax_hist.append(log_softmax)
-            h_hist.append(hidden_clamped)
-
-        return log_softmax_hist, h_hist
 
     def get_energies(self):
         l_energy = 0

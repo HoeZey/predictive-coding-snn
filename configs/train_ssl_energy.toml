@@ -1,0 +1,36 @@
+[network]
+use_alif_neurons = true  
+one_to_one = true
+p_dropout = 0.5
+is_recurrent = false
+b0 = 0.1 
+d_in = 784
+d_hidden = [600, 500, 500]
+d_out = 784
+
+[training]
+supervised = false
+lr = 0.001
+clf_alpha = 0.0
+energy_alpha = 0.05
+spike_alpha = 0.0 
+n_batch = 256
+T = 50
+K = 10  
+clip = 1.0
+log_interval = 100
+epochs = 30
+alpha = 0.5
+beta = 0.5
+rho = 0.0
+
+[checkpoint]
+file_name = "ssl_E"
+
+[decoder]
+self_supervised = true
+recon_alpha = 1.0
+decoder_layer = 2
+
+[reconstruction]
+decoder_layers = [0, 1, 2]
