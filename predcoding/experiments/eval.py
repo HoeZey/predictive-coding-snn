@@ -5,37 +5,25 @@ from predcoding.snn.network import EnergySNN
 
 
 # test function
-def test(model: EnergySNN, test_loader, time_steps):
-    model.eval()
+def test_clf(model: EnergySNN, test_loader, time_steps) -> tuple[float, float]:
     test_loss = 0
     correct = 0
 
     # for data, target in test_loader:
-    for data, target in test_loader:
-        data, target = data.to(model.device), target.to(model.device)
+    for data, labels in test_loader:
+        data, labels = data.to(model.device), labels.to(model.device)
         data = data.view(-1, model.d_in)
 
+        h, logits = model.init_hidden(data.shape[0])
         with torch.no_grad():
-            model.eval()
-            h, readout = model.init_hidden(data.size(0))
+            _, logits = model.inference(data, h, logits, time_steps)
 
-            log_softmax_outputs, _ = model.inference(data, h, readout, time_steps)
+        test_loss += F.cross_entropy(logits, labels, reduction="sum").item()
+        correct += (logits.argmax(dim=-1) == labels).sum().item()
 
-            test_loss += F.nll_loss(log_softmax_outputs[-1], target, reduction="sum").data.item()
-
-            pred = log_softmax_outputs[-1].data.max(1, keepdim=True)[1]
-
-        correct += pred.eq(target.data.view_as(pred)).cpu().sum()
         torch.cuda.empty_cache()
 
-    # wandb.log({'spike sequence': plot_spiking_sequence(hidden, target)})
-
-    test_loss /= len(test_loader.dataset)
-    test_acc = 100.0 * correct / len(test_loader.dataset)
-
-    print(f"Test set: Average loss: {test_loss:.4f}, Accuracy: {correct}/{len(test_loader.dataset)} ({test_acc:.2f}%)")
-
-    return test_loss, 100.0 * correct / len(test_loader.dataset)
+    return test_loss / len(test_loader.dataset), correct / len(test_loader.dataset)
 
 
 def test_reconstruction(model: EnergySNN, test_loader, T):
@@ -45,6 +33,6 @@ def test_reconstruction(model: EnergySNN, test_loader, T):
         h, readout = model.init_hidden(data.shape[0])
         with torch.no_grad():
             _, readout = model.inference(data, h, readout, T)
-            test_loss += F.mse_loss(readout, data, reduction="sum").item()
+            test_loss += F.mse_loss(F.tanh(readout), data, reduction="sum").item()
         torch.cuda.empty_cache()
     return test_loss / len(test_loader.dataset)

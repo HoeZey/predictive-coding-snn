@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data.dataloader import DataLoader
 import matplotlib.pyplot as plt
@@ -86,7 +87,7 @@ def train_recon_decoder(
             spikes = get_states(h_hist, layer, d_hidden, B, T)
             reconstruction = decoder(spikes.mean(axis=1).to(device))
 
-            loss = fn_loss(reconstruction, data)
+            loss = fn_loss(F.tanh(reconstruction), data)
             loss_log.append(loss.item())
 
             optimizer.zero_grad()

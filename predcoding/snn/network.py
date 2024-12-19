@@ -71,8 +71,7 @@ class EnergySNN(nn.Module):
     def forward(
         self, x_t, histories: list[LayerHidden], readout: torch.FloatTensor
     ) -> tuple[list[LayerHidden], torch.FloatTensor]:
-        batch_dim, input_size = x_t.shape
-        spikes = self.dropout(x_t.reshape(batch_dim, input_size).float() * 0.5)
+        spikes = self.dropout(x_t.reshape(-1, self.d_in).float() / self.dropout.p)
 
         new_histories = []
 

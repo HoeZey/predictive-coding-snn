@@ -5,7 +5,7 @@
 #SBATCH --job-name=TR_B_NE
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
-#SBATCH --time=1:00:00
+#SBATCH --time=2:00:00
 #SBATCH --output=outputs/train_model/bottleneck_NE/output_%A.out
 
 module purge

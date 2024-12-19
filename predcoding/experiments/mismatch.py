@@ -38,9 +38,9 @@ def get_clamped_reps(model: EnergySNN, data_loader: DataLoader, T: int, element:
                     # no input for T/4 timesteps before stimulus onset
                     # clamped stimulus for T/2 timesteps
                     # no input for T/4 timesteps after stimulus
-                    _, readout = model.inference(zero_input, h, readout, int(T / 4), clamp=False)
-                    h_hist, readout = model.inference(image_input, h, readout_clamped, int(T / 2), clamp=True)
-                    _, readout = model.inference(zero_input, h, readout, int(T / 4), clamp=False)
+                    h, readout = model.inference(zero_input, h, readout, int(T / 4), clamp=False)
+                    h_hist, readout = model.inference(image_input, h[-1], readout_clamped, int(T / 2), clamp=True)
+                    h, readout = model.inference(zero_input, h[-1], readout, int(T / 4), clamp=False)
 
                     l_layers = [
                         get_states(h_hist, l, d_hidden, batch_size=1, T=int(T / frac), element=element)
@@ -57,7 +57,11 @@ def get_clamped_reps(model: EnergySNN, data_loader: DataLoader, T: int, element:
 
 
 def get_mismatch_results(model: EnergySNN, data_loader: DataLoader, T: int, element: str, keep_time: bool):
+    torch.manual_seed(42)
+    random.seed(42)
     l_clamp_expected = get_clamped_reps(model, data_loader, T, element, keep_time, expected=True)
+    torch.manual_seed(42)
+    random.seed(42)
     l_clamp_surprise = get_clamped_reps(model, data_loader, T, element, keep_time, expected=False)
 
     return l_clamp_expected, l_clamp_surprise

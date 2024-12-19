@@ -7,9 +7,8 @@ def count_parameters(model):
 
 
 def save_checkpoint(state, prefix, filename="_rec2_bias_checkpoint.pth.tar"):
-    print("saving at ", prefix + filename)
+    print("Saving at ", prefix + filename)
     torch.save(state, prefix + filename)
-    shutil.copyfile(prefix + filename, prefix + "_rec2_bias_model_best.pth.tar")
 
 
 def model_result_dict_load(fn):
